@@ -31,21 +31,14 @@ jobs:
         run: npm ci
 
       - name: Build and publish release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.5.20
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: src-tauri
           tagName: ${{ github.ref_name }}
           releaseName: MDX Editor ${{ github.ref_name }}
-          releaseBody: |
-            ## MDX Editor ${{ github.ref_name }}
-
-            - English product name: **MDX Editor**
-            - NSIS installer auto-detects system language (English, Simplified/Traditional Chinese, French, German, Spanish, Japanese, Korean)
-
-            ### Windows
-
-            Download `MDX Editor_*_x64-setup.exe` below and run the installer.
+          releaseBody: Windows NSIS installer for MDX Editor ${{ github.ref_name }}.
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc
