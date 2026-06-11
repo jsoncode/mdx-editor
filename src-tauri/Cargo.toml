@@ -1,6 +1,6 @@
 [package]
 name = "mdx-editor"
-version = "0.1.0"
+version = "0.1.1"
 description = "MDX Desktop Document Editor"
 authors = ["you"]
 edition = "2021"

@@ -37,7 +37,7 @@ function App() {
     setAppView("editor");
     setSearchOpen(false);
     await getCurrentWindow().setTitle(
-      `MDX 编辑器 - ${path.split(/[/\\]/).pop()}`,
+      `MDX Editor - ${path.split(/[/\\]/).pop()}`,
     );
   }, [openDocument, setAppView, setSearchOpen]);
 

@@ -18,7 +18,7 @@ export function useDocumentActions(previewHtml: string) {
 
   const updateTitle = async (path?: string | null) => {
     const name = path?.split(/[/\\]/).pop() ?? "未命名文档";
-    await getCurrentWindow().setTitle(`MDX 编辑器 - ${name}`);
+    await getCurrentWindow().setTitle(`MDX Editor - ${name}`);
   };
 
   const handleNew = async () => {
