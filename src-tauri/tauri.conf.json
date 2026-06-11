@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MDX 编辑器",
+  "version": "0.1.0",
+  "identifier": "com.mdx.editor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "MDX 编辑器",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "MDX 文档编辑器",
+    "longDescription": "基于 Markdown 的 MDX 单文件文档编辑器，支持媒体嵌入、双栏预览与导出。",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      },
+      "nsis": {
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["mdx"],
+        "name": "MDX 文档",
+        "description": "MDX 打包 Markdown 文档",
+        "mimeType": "application/x-mdx",
+        "role": "Editor"
+      }
+    ]
+  }
+}
