@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::path::Path;
 
 use zip::ZipArchive;
@@ -8,13 +8,22 @@ use crate::error::{AppError, AppResult};
 use crate::workspace::{ASSET_DIR, INDEX_FILE};
 
 pub fn unpack_to_workspace(mdx_path: &Path, workspace_path: &Path) -> AppResult<()> {
+    let file = File::open(mdx_path)?;
+    unpack_archive(ZipArchive::new(file)?, workspace_path)
+}
+
+pub fn unpack_bytes_to_workspace(data: &[u8], workspace_path: &Path) -> AppResult<()> {
+    unpack_archive(
+        ZipArchive::new(std::io::Cursor::new(data.to_vec()))?,
+        workspace_path,
+    )
+}
+
+fn unpack_archive<R: Read + Seek>(mut archive: ZipArchive<R>, workspace_path: &Path) -> AppResult<()> {
     if workspace_path.exists() {
         fs::remove_dir_all(workspace_path)?;
     }
     fs::create_dir_all(workspace_path)?;
-
-    let file = File::open(mdx_path)?;
-    let mut archive = ZipArchive::new(file)?;
 
     let mut has_index = false;
     for i in 0..archive.len() {

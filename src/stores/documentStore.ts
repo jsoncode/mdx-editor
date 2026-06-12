@@ -10,6 +10,7 @@ import { pullVaultBeforeAccess, pushVaultAfterSave } from "../lib/gitSyncWorkflo
 import { addRecentFile } from "../lib/recentFiles";
 import { flushEditorContentToStore, getEditorFlushStats } from "../lib/editorContent";
 import { diag, diagSaveCloseState } from "../lib/diagnosticLog";
+import { requestDocumentPassword } from "../lib/passwordPrompt";
 import { saveGuard } from "../lib/saveGuard";
 import type { DocumentState, Manifest, SaveStatus } from "../types/document";
 import type { RecentFileEntry } from "../types/recent";
@@ -22,6 +23,8 @@ interface DocumentStore {
   savedContent: string;
   manifest: Manifest | null;
   filePath: string | null;
+  isEncrypted: boolean;
+  encryptionPassword: string | null;
   isDirty: boolean;
   saveStatus: SaveStatus;
   recentFiles: RecentFileEntry[];
@@ -51,6 +54,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   savedContent: "",
   manifest: null,
   filePath: null,
+  isEncrypted: false,
+  encryptionPassword: null,
   isDirty: false,
   saveStatus: "idle",
   recentFiles: [],
@@ -103,6 +108,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       savedContent: doc.content,
       manifest: doc.manifest,
       filePath: doc.file_path,
+      isEncrypted: false,
+      encryptionPassword: null,
       isDirty: false,
       saveStatus: "saved",
     });
@@ -121,7 +128,27 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     cancelMediaPrewarm();
     clearAssetCache();
-    const doc = await invoke<DocumentState>("open_document", { path });
+
+    let password: string | null = null;
+    const isMdx = path.toLowerCase().endsWith(".mdx");
+    if (isMdx) {
+      const encrypted = await invoke<boolean>("is_encrypted_mdx", { path });
+      if (encrypted) {
+        password = await requestDocumentPassword({
+          title: "打开加密文档",
+          description: "该 MDX 文档已加密，请输入密码后解密并打开。",
+          submitLabel: "解密并打开",
+        });
+        if (!password) {
+          throw new Error("已取消打开");
+        }
+      }
+    }
+
+    const doc = await invoke<DocumentState>("open_document", {
+      path,
+      password,
+    });
     const recentFiles = await addRecentFile(path);
     set({
       workspaceId: doc.workspace_id,
@@ -129,6 +156,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       savedContent: doc.content,
       manifest: doc.manifest,
       filePath: doc.file_path,
+      isEncrypted: doc.is_encrypted ?? Boolean(password),
+      encryptionPassword: password,
       isDirty: false,
       saveStatus: "saved",
       recentFiles,
@@ -150,7 +179,28 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const flushed = flushEditorContentToStore();
     diag("save", "saveDocument_flush", { flushed, ...getEditorFlushStats() }, flushed ? "info" : "warn");
     try {
-      const { content, savedContent: previousContent, filePath, manifest: currentManifest } = get();
+      const {
+        content,
+        savedContent: previousContent,
+        filePath,
+        manifest: currentManifest,
+        isEncrypted,
+        encryptionPassword,
+      } = get();
+
+      let savePassword = encryptionPassword;
+      if (isEncrypted && !path && !savePassword) {
+        savePassword = await requestDocumentPassword({
+          title: "保存加密文档",
+          description: "请输入密码以保存加密 MDX 文档。",
+          submitLabel: "保存",
+        });
+        if (!savePassword) {
+          set({ saveStatus: "dirty" });
+          return null;
+        }
+        set({ encryptionPassword: savePassword });
+      }
 
       set({ saveStatus: "saving" });
       diag("save", "update_document_content_call", { contentLen: content.length });
@@ -177,6 +227,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const saved = await invoke<{ path: string; content: string }>("save_document", {
         workspaceId,
         path: path ?? null,
+        password: savePassword,
       });
       diag("save", "save_document_ipc_ok", {
         savedPath: saved?.path ?? null,
@@ -194,11 +245,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (savedPath) {
         const recentFiles = await addRecentFile(savedPath);
+        let nextEncrypted = isEncrypted;
+        if (savedPath.toLowerCase().endsWith(".mdx")) {
+          nextEncrypted = await invoke<boolean>("is_encrypted_mdx", { path: savedPath });
+        } else {
+          nextEncrypted = false;
+        }
         set({
           filePath: savedPath,
           content: savedContent,
           savedContent,
           manifest,
+          isEncrypted: nextEncrypted,
+          encryptionPassword: nextEncrypted ? savePassword : null,
           isDirty: false,
           saveStatus: "saved",
           recentFiles,
@@ -278,6 +337,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       savedContent: "",
       manifest: null,
       filePath: null,
+      isEncrypted: false,
+      encryptionPassword: null,
       isDirty: false,
       saveStatus: "idle",
     });

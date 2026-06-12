@@ -72,6 +72,7 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
   const [resolvedSrc, setResolvedSrc] = useState("");
   const [ready, setReady] = useState(false);
   const [transcoding, setTranscoding] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [previewRevision, setPreviewRevision] = useState(getMediaPreviewRevision);
 
   useEffect(() => subscribeMediaPreviewRevision(() => {
@@ -83,6 +84,7 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
       setResolvedSrc("");
       setReady(true);
       setTranscoding(false);
+      setMediaError(null);
       return;
     }
 
@@ -94,6 +96,15 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
       setResolvedSrc(url);
       setReady(true);
       setTranscoding(isTranscoding);
+      setMediaError(null);
+    };
+
+    const applyError = (error: unknown) => {
+      if (cancelled) return;
+      setResolvedSrc("");
+      setReady(true);
+      setTranscoding(false);
+      setMediaError(String(error));
     };
 
     const cached = peekMediaPreviewUrl(workspaceId, src, ffmpegPath);
@@ -113,16 +124,17 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
 
     setReady(false);
     setTranscoding(true);
+    setMediaError(null);
     void resolveMediaPreviewUrl(workspaceId, src, ffmpegPath).then((url) => {
       applyUrl(url, false);
-    });
+    }).catch(applyError);
 
     return () => {
       cancelled = true;
     };
   }, [src, workspaceId, ffmpegPath, previewRevision]);
 
-  return { resolvedSrc, ready, transcoding };
+  return { resolvedSrc, ready, transcoding, mediaError };
 }
 
 function previewMimeFromPath(
@@ -161,7 +173,7 @@ function AssetVideo({
   src?: string;
   workspaceId: string | null;
 }) {
-  const { resolvedSrc, ready, transcoding } = useResolvedMediaUrl(workspaceId, src);
+  const { resolvedSrc, ready, transcoding, mediaError } = useResolvedMediaUrl(workspaceId, src);
   if (!src) return null;
 
   const normalized = normalizeAssetPath(src);
@@ -170,6 +182,14 @@ function AssetVideo({
   const mime = playbackSrc
     ? previewMimeFromPath(playbackSrc, "video", sourceExt)
     : videoMimeType(sourceExt);
+
+  if (mediaError) {
+    return (
+      <p className="media-preview-status media-preview-error" aria-live="polite">
+        视频预览失败：{mediaError}
+      </p>
+    );
+  }
 
   if (transcoding || !playbackSrc) {
     return (
@@ -193,7 +213,7 @@ function AssetAudio({
   src?: string;
   workspaceId: string | null;
 }) {
-  const { resolvedSrc, ready, transcoding } = useResolvedMediaUrl(workspaceId, src);
+  const { resolvedSrc, ready, transcoding, mediaError } = useResolvedMediaUrl(workspaceId, src);
   if (!src) return null;
 
   const normalized = normalizeAssetPath(src);
@@ -204,6 +224,14 @@ function AssetAudio({
         (value): value is string => Boolean(value),
       )
     : audioMimeFallbacks(sourceExt);
+
+  if (mediaError) {
+    return (
+      <p className="media-preview-status media-preview-error" aria-live="polite">
+        音频预览失败：{mediaError}
+      </p>
+    );
+  }
 
   if (transcoding || !playbackSrc) {
     return (

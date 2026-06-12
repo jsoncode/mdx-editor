@@ -24,6 +24,7 @@ pub struct WorkspaceInfo {
     pub id: String,
     pub path: PathBuf,
     pub file_path: Option<PathBuf>,
+    pub source_encrypted: bool,
 }
 
 impl WorkspaceManager {
@@ -71,6 +72,7 @@ impl WorkspaceManager {
             id: id.clone(),
             path,
             file_path: None,
+            source_encrypted: false,
         };
         self.workspaces
             .lock()
@@ -84,11 +86,13 @@ impl WorkspaceManager {
         id: String,
         path: PathBuf,
         file_path: Option<PathBuf>,
+        source_encrypted: bool,
     ) -> WorkspaceInfo {
         let info = WorkspaceInfo {
             id: id.clone(),
             path,
             file_path,
+            source_encrypted,
         };
         self.workspaces
             .lock()
@@ -172,6 +176,15 @@ impl WorkspaceManager {
             .get_mut(workspace_id)
             .ok_or_else(|| AppError::WorkspaceNotFound(workspace_id.to_string()))?;
         info.file_path = file_path;
+        Ok(())
+    }
+
+    pub fn set_source_encrypted(&self, workspace_id: &str, encrypted: bool) -> AppResult<()> {
+        let mut workspaces = self.workspaces.lock().unwrap();
+        let info = workspaces
+            .get_mut(workspace_id)
+            .ok_or_else(|| AppError::WorkspaceNotFound(workspace_id.to_string()))?;
+        info.source_encrypted = encrypted;
         Ok(())
     }
 

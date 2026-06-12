@@ -5,6 +5,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
+use serde::Serialize;
 use tauri::AppHandle;
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
@@ -114,28 +115,190 @@ fn bundled_sidecar_command(app: &AppHandle) -> Option<Command> {
         .map(Command::from)
 }
 
-fn build_ffmpeg_command(app: &AppHandle, user_path: Option<&str>) -> AppResult<Command> {
-    if let Some(path) = user_path.and_then(|raw| normalize_user_ffmpeg_path(raw)) {
-        return Ok(Command::new(path));
+fn ffmpeg_executable_name() -> &'static str {
+    #[cfg(windows)]
+    {
+        "ffmpeg.exe"
+    }
+    #[cfg(not(windows))]
+    {
+        "ffmpeg"
+    }
+}
+
+fn expand_windows_env_var(value: &str) -> String {
+    let mut result = value.to_string();
+    for _ in 0..16 {
+        let Some(start) = result.find('%') else {
+            break;
+        };
+        let rest = &result[start + 1..];
+        let Some(end) = rest.find('%') else {
+            break;
+        };
+        if end == 0 {
+            break;
+        }
+        let var_name = &rest[..end];
+        let replacement = std::env::var(var_name).unwrap_or_default();
+        result = format!("{}{}{}", &result[..start], replacement, &rest[end + 1..]);
+    }
+    result
+}
+
+#[cfg(windows)]
+fn read_windows_registry_path() -> Vec<PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    let mut paths = Vec::new();
+    let mut push_var = |value: String| {
+        let expanded = expand_windows_env_var(&value);
+        paths.extend(std::env::split_paths(&expanded));
+    };
+
+    if let Ok(env) = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Environment") {
+        if let Ok(path) = env.get_value::<String, _>("Path") {
+            push_var(path);
+        }
+    }
+    if let Ok(env) = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(
+        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+    ) {
+        if let Ok(path) = env.get_value::<String, _>("Path") {
+            push_var(path);
+        }
     }
 
-    if let Some(cmd) = bundled_sidecar_command(app) {
-        return Ok(cmd);
+    paths
+}
+
+fn collect_path_directories() -> Vec<PathBuf> {
+    let mut seen = std::collections::HashSet::new();
+    let mut dirs = Vec::new();
+
+    let mut push_dir = |dir: PathBuf| {
+        if dir.as_os_str().is_empty() {
+            return;
+        }
+        if seen.insert(dir.clone()) {
+            dirs.push(dir);
+        }
+    };
+
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            push_dir(dir);
+        }
     }
 
     #[cfg(windows)]
-    let file_name = "ffmpeg.exe";
-    #[cfg(not(windows))]
-    let file_name = "ffmpeg";
+    for dir in read_windows_registry_path() {
+        push_dir(dir);
+    }
 
-    if let Ok(path) = which::which(file_name) {
-        return Ok(Command::new(path));
+    dirs
+}
+
+fn find_ffmpeg_in_system_path() -> Option<PathBuf> {
+    let name = ffmpeg_executable_name();
+
+    if let Ok(path) = which::which(name) {
+        return Some(path);
+    }
+
+    let dirs = collect_path_directories();
+    if let Ok(path_env) = std::env::join_paths(&dirs) {
+        if let Ok(path) = which::which_in(name, Some(path_env), Path::new(".")) {
+            return Some(path);
+        }
+    }
+
+    for dir in dirs {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FfmpegSource {
+    User,
+    SystemPath,
+    Sidecar,
+}
+
+impl FfmpegSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::SystemPath => "path",
+            Self::Sidecar => "sidecar",
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FfmpegStatus {
+    pub available: bool,
+    pub source: Option<String>,
+    pub path: Option<String>,
+}
+
+fn locate_ffmpeg(app: &AppHandle, user_path: Option<&str>) -> Result<(FfmpegSource, PathBuf), AppError> {
+    if let Some(path) = user_path.and_then(|raw| normalize_user_ffmpeg_path(raw)) {
+        return Ok((FfmpegSource::User, path));
+    }
+
+    if let Some(path) = find_ffmpeg_in_system_path() {
+        return Ok((FfmpegSource::SystemPath, path));
+    }
+
+    if bundled_sidecar_command(app).is_some() {
+        return Ok((FfmpegSource::Sidecar, PathBuf::from(ffmpeg_executable_name())));
     }
 
     Err(AppError::Other(
-        "未找到 FFmpeg。请在「设置 → 媒体预览」中配置 FFmpeg 路径，或确保系统 PATH 中已安装 FFmpeg。"
+        "未找到 FFmpeg。请安装 FFmpeg 并加入系统 PATH，或在「设置 → 媒体预览」中指定可执行文件路径。"
             .to_string(),
     ))
+}
+
+fn prepare_ffmpeg_command(cmd: &mut Command, executable: &Path) {
+    if let Some(parent) = executable.parent() {
+        if parent.as_os_str().is_empty() {
+            return;
+        }
+        let path_var = std::env::var("PATH").unwrap_or_default();
+        let new_path = std::env::join_paths(
+            std::iter::once(parent.to_path_buf()).chain(std::env::split_paths(&path_var)),
+        );
+        if let Ok(path) = new_path {
+            cmd.env("PATH", path);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+fn build_ffmpeg_command(app: &AppHandle, user_path: Option<&str>) -> AppResult<Command> {
+    let (source, path) = locate_ffmpeg(app, user_path)?;
+    let mut cmd = match source {
+        FfmpegSource::Sidecar => bundled_sidecar_command(app)
+            .ok_or_else(|| AppError::Other("内置 FFmpeg 不可用".to_string()))?,
+        FfmpegSource::User | FfmpegSource::SystemPath => Command::new(&path),
+    };
+    prepare_ffmpeg_command(&mut cmd, &path);
+    Ok(cmd)
 }
 
 fn output_extension(source_ext: &str) -> &'static str {
@@ -178,9 +341,7 @@ fn run_ffmpeg_transcode(
 
     cmd.args([
         "-movflags",
-        "frag_keyframe+empty_moov+default_base_moof",
-        "-f",
-        "mp4",
+        "+faststart",
     ])
     .arg(output)
     .stdin(Stdio::null())
@@ -190,10 +351,9 @@ fn run_ffmpeg_transcode(
     let result = cmd.output().map_err(AppError::Io)?;
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
-        return Err(AppError::Other(format!(
-            "FFmpeg 转码失败: {}",
-            stderr.trim()
-        )));
+        let message = format!("FFmpeg 转码失败: {}", stderr.trim());
+        crate::diagnostics::log("rust", "error", "ffmpeg_transcode_failed", &message);
+        return Err(AppError::Other(message));
     }
 
     if !output.is_file() {
@@ -249,7 +409,22 @@ pub fn resolve_preview_path(
 }
 
 pub fn ffmpeg_available(app: &AppHandle, user_path: Option<&str>) -> bool {
-    build_ffmpeg_command(app, user_path).is_ok()
+    locate_ffmpeg(app, user_path).is_ok()
+}
+
+pub fn get_ffmpeg_status(app: &AppHandle, user_path: Option<&str>) -> FfmpegStatus {
+    match locate_ffmpeg(app, user_path) {
+        Ok((source, path)) => FfmpegStatus {
+            available: true,
+            source: Some(source.as_str().to_string()),
+            path: Some(path.to_string_lossy().to_string()),
+        },
+        Err(_) => FfmpegStatus {
+            available: false,
+            source: None,
+            path: None,
+        },
+    }
 }
 
 pub fn test_ffmpeg(app: &AppHandle, user_path: Option<&str>) -> AppResult<String> {
@@ -269,6 +444,34 @@ pub fn test_ffmpeg(app: &AppHandle, user_path: Option<&str>) -> AppResult<String
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let first_line = stdout.lines().next().unwrap_or("FFmpeg 可用").trim();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}{stderr}");
+    let first_line = combined
+        .lines()
+        .find(|line| line.contains("ffmpeg version") || line.contains("FFmpeg"))
+        .unwrap_or("FFmpeg 可用")
+        .trim();
     Ok(first_line.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expand_windows_env_var_replaces_program_files() {
+        std::env::set_var("MDX_TEST_PROG", "C:\\Program Files\\ffmpeg");
+        let expanded = expand_windows_env_var("%MDX_TEST_PROG%\\bin");
+        assert_eq!(expanded, "C:\\Program Files\\ffmpeg\\bin");
+    }
+
+    #[test]
+    fn find_system_ffmpeg_when_installed() {
+        if find_ffmpeg_in_system_path().is_none() {
+            eprintln!("skip find_system_ffmpeg_when_installed: ffmpeg not on PATH");
+            return;
+        }
+        let path = find_ffmpeg_in_system_path().unwrap();
+        assert!(path.is_file(), "expected ffmpeg binary at {}", path.display());
+    }
 }

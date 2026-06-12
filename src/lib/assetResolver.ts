@@ -3,6 +3,7 @@ import {
   extensionFromPath,
   isAudioExtension,
   isVideoExtension,
+  needsMediaTranscode,
   normalizeAssetPath,
 } from "./media";
 
@@ -118,8 +119,12 @@ export async function resolveMediaPreviewUrl(
     mediaPreviewCache.set(cacheKey, url);
     bumpMediaPreviewRevision();
     return url;
-  } catch {
-    return resolveAssetUrl(workspaceId, src);
+  } catch (error) {
+    console.error("resolveMediaPreviewUrl failed:", error);
+    if (!needsMediaTranscode(normalized)) {
+      return resolveAssetUrl(workspaceId, src);
+    }
+    throw error;
   }
 }
 

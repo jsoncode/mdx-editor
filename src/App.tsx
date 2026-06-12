@@ -11,6 +11,7 @@ import { UnsavedDialog } from "./components/UnsavedDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { DocumentHistoryPage } from "./components/DocumentHistoryPage";
 import { DocumentPropertiesDialog } from "./components/DocumentPropertiesDialog";
+import { PasswordPromptDialog } from "./components/PasswordPromptDialog";
 import { useAutosave } from "./hooks/useAutosave";
 import { useDocumentActions } from "./hooks/useDocumentActions";
 import { usePrintLayout } from "./hooks/usePrintLayout";
@@ -536,6 +537,8 @@ function App() {
         manifest={manifest}
         onClose={() => setPropertiesOpen(false)}
       />
+
+      <PasswordPromptDialog />
     </div>
   );
 }

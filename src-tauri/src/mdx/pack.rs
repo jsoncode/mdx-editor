@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::path::Path;
 
 use uuid::Uuid;
@@ -38,21 +38,39 @@ pub fn pack_workspace(workspace_path: &Path, output_path: &Path, manifest: &mut 
 
     let file = File::create(output_path)?;
     let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default()
-        .compression_method(CompressionMethod::Deflated);
+    write_workspace_to_zip(&mut zip, workspace_path, manifest)?;
+    zip.finish()?;
+    Ok(())
+}
+
+pub fn pack_workspace_to_bytes(workspace_path: &Path, manifest: &mut Manifest) -> AppResult<Vec<u8>> {
+    manifest.touch();
+    let buffer = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buffer);
+    write_workspace_to_zip(&mut zip, workspace_path, manifest)?;
+    let buffer = zip.finish()?;
+    Ok(buffer.into_inner())
+}
+
+fn write_workspace_to_zip<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    workspace_path: &Path,
+    manifest: &Manifest,
+) -> AppResult<()> {
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
     let index_path = workspace_path.join(INDEX_FILE);
     if !index_path.exists() {
         return Err(AppError::InvalidMdx("index.md not found in workspace".to_string()));
     }
-    add_file_to_zip(&mut zip, INDEX_FILE, &index_path, options)?;
+    add_file_to_zip(zip, INDEX_FILE, &index_path, options)?;
 
     fs::write(
         workspace_path.join(MANIFEST_FILE),
         serde_json::to_string_pretty(manifest)?,
     )?;
     add_file_to_zip(
-        &mut zip,
+        zip,
         MANIFEST_FILE,
         &workspace_path.join(MANIFEST_FILE),
         options,
@@ -60,7 +78,7 @@ pub fn pack_workspace(workspace_path: &Path, output_path: &Path, manifest: &mut 
 
     let versions_path = workspace_path.join(VERSIONS_FILE);
     if versions_path.exists() {
-        add_file_to_zip(&mut zip, VERSIONS_FILE, &versions_path, options)?;
+        add_file_to_zip(zip, VERSIONS_FILE, &versions_path, options)?;
     }
 
     let index_content = fs::read_to_string(&index_path)?;
@@ -73,17 +91,16 @@ pub fn pack_workspace(workspace_path: &Path, output_path: &Path, manifest: &mut 
             };
             let file_path = asset_dir.join(filename);
             if file_path.is_file() {
-                add_file_to_zip(&mut zip, &relative_path, &file_path, options)?;
+                add_file_to_zip(zip, &relative_path, &file_path, options)?;
             }
         }
     }
 
-    zip.finish()?;
     Ok(())
 }
 
-fn add_file_to_zip(
-    zip: &mut ZipWriter<File>,
+fn add_file_to_zip<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
     name_in_archive: &str,
     file_path: &Path,
     options: SimpleFileOptions,

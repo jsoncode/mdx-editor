@@ -114,6 +114,7 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
                 <div className="ribbon-menu-divider" role="separator" />
                 <RibbonMenuItem label="导出 Markdown" icon={<IconExport />} onClick={() => void actions.handleExportMarkdown()} />
                 <RibbonMenuItem label="导出 HTML" icon={<IconExport />} onClick={() => void actions.handleExportHtml()} />
+                <RibbonMenuItem label="加密导出 MDX" icon={<IconExport />} onClick={() => void actions.handleExportEncryptedMdx()} />
                 <div className="ribbon-menu-divider" role="separator" />
                 <RibbonMenuItem label="打印" icon={<IconPrint />} onClick={onPrint} />
               </>

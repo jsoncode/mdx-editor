@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::manifest::{DocumentMetadataInput, Manifest};
-use crate::mdx::{pack_workspace, unpack_to_workspace};
+use crate::mdx::{decrypt_bytes, encrypt_bytes, is_encrypted_mdx as mdx_is_encrypted, pack_workspace, pack_workspace_to_bytes, unpack_bytes_to_workspace, unpack_to_workspace};
 use crate::versions::{DocumentHistoryEntry, DocumentVersionsFile};
 use crate::workspace::{INDEX_FILE, WorkspaceManager};
 
@@ -41,6 +41,7 @@ fn open_plain_markdown_workspace(
         id,
         workspace_path,
         Some(file_path.to_path_buf()),
+        false,
     ))
 }
 
@@ -50,6 +51,7 @@ pub struct DocumentState {
     pub content: String,
     pub manifest: Manifest,
     pub file_path: Option<String>,
+    pub is_encrypted: bool,
 }
 
 #[tauri::command]
@@ -64,7 +66,13 @@ pub fn create_document(
         content: String::new(),
         manifest,
         file_path: None,
+        is_encrypted: false,
     })
+}
+
+#[tauri::command]
+pub fn is_encrypted_mdx(path: String) -> Result<bool, AppError> {
+    Ok(crate::mdx::is_encrypted_mdx(&PathBuf::from(path))?)
 }
 
 #[tauri::command]
@@ -72,20 +80,41 @@ pub fn open_document(
     app: AppHandle,
     workspaces: State<'_, WorkspaceManager>,
     path: String,
+    password: Option<String>,
 ) -> Result<DocumentState, AppError> {
     let file_path = PathBuf::from(&path);
     if !file_path.exists() {
         return Err(AppError::Other(format!("File not found: {path}")));
     }
 
-    let info = match extension_lower(&file_path).as_deref() {
+    let (info, is_encrypted) = match extension_lower(&file_path).as_deref() {
         Some("mdx") => {
             let id = Uuid::new_v4().to_string();
             let workspace_path = WorkspaceManager::workspaces_root(&app)?.join(&id);
-            unpack_to_workspace(&file_path, &workspace_path)?;
-            workspaces.register_workspace(id, workspace_path, Some(file_path))
+            let encrypted = mdx_is_encrypted(&file_path)?;
+            if encrypted {
+                let pwd = password.filter(|value| !value.is_empty()).ok_or_else(|| {
+                    AppError::Other("该文档已加密，请输入密码".to_string())
+                })?;
+                let payload = fs::read(&file_path)?;
+                let zip_bytes = decrypt_bytes(&payload, &pwd)?;
+                unpack_bytes_to_workspace(&zip_bytes, &workspace_path)?;
+                (
+                    workspaces.register_workspace(id, workspace_path, Some(file_path), true),
+                    true,
+                )
+            } else {
+                unpack_to_workspace(&file_path, &workspace_path)?;
+                (
+                    workspaces.register_workspace(id, workspace_path, Some(file_path), false),
+                    false,
+                )
+            }
         }
-        Some("md") => open_plain_markdown_workspace(&app, &workspaces, &file_path)?,
+        Some("md") => {
+            let info = open_plain_markdown_workspace(&app, &workspaces, &file_path)?;
+            (info, false)
+        }
         _ => {
             return Err(AppError::Other(
                 "仅支持打开 .md 或 .mdx 文件".to_string(),
@@ -101,6 +130,7 @@ pub fn open_document(
         content,
         manifest,
         file_path: info.file_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+        is_encrypted,
     })
 }
 
@@ -150,8 +180,10 @@ pub fn save_document(
     workspaces: State<'_, WorkspaceManager>,
     workspace_id: String,
     path: Option<String>,
+    password: Option<String>,
 ) -> Result<SaveDocumentResult, AppError> {
     let info = workspaces.get(&workspace_id)?;
+    let saving_to_original = path.is_none();
     let output_path = match path {
         Some(p) => PathBuf::from(p),
         None => info
@@ -207,9 +239,29 @@ pub fn save_document(
     workspaces.cleanup_unused_assets(&workspace_id)?;
 
     let mut manifest = workspaces.read_manifest(&workspace_id)?;
-    pack_workspace(&info.path, &output_path, &mut manifest)?;
+    let write_encrypted = if output_path.is_file() {
+        crate::mdx::is_encrypted_mdx(&output_path)?
+    } else {
+        saving_to_original && info.source_encrypted
+    };
+
+    if write_encrypted {
+        let pwd = password.filter(|value| !value.is_empty()).ok_or_else(|| {
+            AppError::Other("保存加密文档需要密码".to_string())
+        })?;
+        let zip_bytes = pack_workspace_to_bytes(&info.path, &mut manifest)?;
+        let encrypted = encrypt_bytes(&zip_bytes, &pwd)?;
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&output_path, encrypted)?;
+    } else {
+        pack_workspace(&info.path, &output_path, &mut manifest)?;
+    }
+
     workspaces.write_manifest(&workspace_id, &manifest)?;
     workspaces.set_file_path(&workspace_id, Some(output_path.clone()))?;
+    workspaces.set_source_encrypted(&workspace_id, write_encrypted)?;
 
     crate::diagnostics::log(
         "rust",

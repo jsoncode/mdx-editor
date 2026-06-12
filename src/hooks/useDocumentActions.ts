@@ -10,6 +10,7 @@ import {
   MARKDOWN_DOCUMENT_SAVE_FILTERS,
   MDX_SAVE_FILTER,
 } from "../lib/documentPaths";
+import { requestDocumentPassword } from "../lib/passwordPrompt";
 import { promptPlainMdSaveChoice } from "../lib/savePrompt";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
@@ -234,6 +235,35 @@ export function useDocumentActions(previewHtml: string) {
     }
   };
 
+  const handleExportEncryptedMdx = async () => {
+    if (!workspaceId) return;
+    const password = await requestDocumentPassword({
+      title: "加密导出 MDX",
+      description: "设置密码后，导出的 MDX 文件将加密存储；打开时需要输入相同密码。",
+      confirm: true,
+      submitLabel: "加密导出",
+    });
+    if (!password) return;
+
+    const selected = await save({
+      title: "加密导出 MDX",
+      filters: [...MDX_SAVE_FILTER],
+      defaultPath: defaultSavePath(filePath, "mdx"),
+    });
+    if (typeof selected !== "string") return;
+
+    try {
+      await invoke("export_encrypted_mdx", {
+        workspaceId,
+        outputPath: selected,
+        password,
+      });
+      await message("加密 MDX 已导出。", { title: "导出完成", kind: "info" });
+    } catch (error) {
+      await message(String(error), { title: "加密导出失败", kind: "error" });
+    }
+  };
+
   const handleOpenPath = async (path: string) => {
     try {
       const entries = await openDocument(path);
@@ -256,6 +286,7 @@ export function useDocumentActions(previewHtml: string) {
     handleInsertMedia,
     handleExportMarkdown,
     handleExportHtml,
+    handleExportEncryptedMdx,
     handleOpenPath,
   };
 }

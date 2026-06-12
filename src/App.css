@@ -1296,6 +1296,10 @@ body,
   color: var(--text-muted, #888);
 }
 
+.markdown-preview .media-preview-error {
+  color: #c0392b;
+}
+
 .markdown-preview .media-prewarm-banner {
   margin: 0 0 0.75rem;
   padding: 0.5rem 0.75rem;
@@ -1335,6 +1339,64 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.password-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.password-prompt-dialog {
+  width: min(420px, calc(100vw - 2rem));
+  padding: 1.25rem 1.5rem;
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.password-prompt-dialog h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+}
+
+.password-prompt-desc {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted, #666);
+  line-height: 1.5;
+}
+
+.password-prompt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.password-prompt-field input {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 6px;
+  font-size: 0.9375rem;
+}
+
+.password-prompt-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: #c0392b;
+}
+
+.password-prompt-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
 }
 
 .dialog-overlay {
@@ -1944,6 +2006,10 @@ body.printing .markdown-preview {
 
 .settings-hint-warn {
   color: #b45309;
+}
+
+.settings-hint-ok {
+  color: #15803d;
 }
 
 .settings-section {

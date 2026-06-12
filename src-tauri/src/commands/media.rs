@@ -29,6 +29,14 @@ pub async fn resolve_media_preview(
 }
 
 #[tauri::command]
+pub fn get_ffmpeg_status(app: AppHandle, ffmpeg_path: Option<String>) -> Result<media_preview::FfmpegStatus, AppError> {
+    Ok(media_preview::get_ffmpeg_status(
+        &app,
+        ffmpeg_path.as_deref().filter(|value| !value.trim().is_empty()),
+    ))
+}
+
+#[tauri::command]
 pub fn ffmpeg_available(app: AppHandle, ffmpeg_path: Option<String>) -> Result<bool, AppError> {
     Ok(media_preview::ffmpeg_available(
         &app,

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tauri::State;
 
 use crate::error::AppError;
+use crate::mdx::{encrypt_bytes, pack_workspace_to_bytes};
 use crate::workspace::{ASSET_DIR, INDEX_FILE, WorkspaceManager};
 
 #[tauri::command]
@@ -37,15 +38,45 @@ pub fn export_markdown(
 }
 
 #[tauri::command]
-pub fn export_html(
-    output_path: String,
-    html: String,
-) -> Result<(), AppError> {
+pub fn export_html(output_path: String, html: String) -> Result<(), AppError> {
     let output = PathBuf::from(&output_path);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(output, html)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn export_encrypted_mdx(
+    workspaces: State<'_, WorkspaceManager>,
+    workspace_id: String,
+    output_path: String,
+    password: String,
+) -> Result<(), AppError> {
+    let info = workspaces.get(&workspace_id)?;
+    let output = PathBuf::from(&output_path);
+
+    if output
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("mdx"))
+        != Some(true)
+    {
+        return Err(AppError::Other("加密导出路径必须使用 .mdx 扩展名".to_string()));
+    }
+
+    workspaces.cleanup_unused_assets(&workspace_id)?;
+
+    let mut manifest = workspaces.read_manifest(&workspace_id)?;
+    let zip_bytes = pack_workspace_to_bytes(&info.path, &mut manifest)?;
+    let encrypted = encrypt_bytes(&zip_bytes, &password)?;
+
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(output, encrypted)?;
+    workspaces.write_manifest(&workspace_id, &manifest)?;
     Ok(())
 }
 

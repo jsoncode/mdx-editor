@@ -26,6 +26,7 @@ export interface DocumentState {
   content: string;
   manifest: Manifest;
   file_path: string | null;
+  is_encrypted?: boolean;
 }
 
 export type SaveStatus = "saved" | "saving" | "dirty" | "idle";

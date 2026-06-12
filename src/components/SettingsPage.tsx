@@ -21,6 +21,8 @@ import { cancelMediaPrewarm, prewarmDocumentMedia } from "../lib/mediaPrewarm";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
 import type { GitSyncSettings } from "../types/settings";
+import type { FfmpegStatus } from "../types/ffmpeg";
+import { ffmpegSourceLabel } from "../types/ffmpeg";
 
 export function SettingsPage() {
   const editorHistoryDepth = useSettingsStore((s) => s.editorHistoryDepth);
@@ -42,6 +44,7 @@ export function SettingsPage() {
   const [singleLineBreaksEnabled, setSingleLineBreaksEnabled] = useState(false);
   const [ffmpegPathInput, setFfmpegPathInput] = useState("");
   const [testingFfmpeg, setTestingFfmpeg] = useState(false);
+  const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
   const [gitEnabled, setGitEnabled] = useState(false);
   const [remoteUrl, setRemoteUrl] = useState("");
   const [token, setToken] = useState("");
@@ -97,6 +100,27 @@ export function SettingsPage() {
     ffmpegPath,
     gitSync,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const trimmed = ffmpegPathInput.trim();
+    void invoke<FfmpegStatus>("get_ffmpeg_status", {
+      ffmpegPath: trimmed || null,
+    })
+      .then((status) => {
+        if (!cancelled) {
+          setFfmpegStatus(status);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFfmpegStatus({ available: false });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ffmpegPathInput]);
 
   const buildGitSettings = (): GitSyncSettings => ({
     enabled: gitEnabled,
@@ -287,21 +311,35 @@ export function SettingsPage() {
         <section className="settings-card">
           <h2>媒体预览</h2>
           <p className="settings-card-desc">
-            预览 WMA、WMV、AVI 等浏览器不支持的格式时，需要 FFmpeg 转码。默认使用系统 PATH 中的
-            FFmpeg；也可在此指定可执行文件路径。
+            预览 WMA、WMV、AVI 等浏览器不支持的格式时，需要 FFmpeg 转码。若系统 PATH
+            中已安装 FFmpeg，留空下方路径即可自动使用，无需手动配置。
           </p>
+          {ffmpegStatus?.available ? (
+            <p className="settings-hint settings-hint-ok settings-hint-block">
+              已检测到 FFmpeg（{ffmpegSourceLabel(ffmpegStatus.source ?? "")}
+              {ffmpegStatus.path ? `：${ffmpegStatus.path}` : ""}）
+              {ffmpegStatus.source === "path" && !ffmpegPathInput.trim()
+                ? "，可直接预览需转码的媒体。"
+                : ""}
+            </p>
+          ) : ffmpegStatus ? (
+            <p className="settings-hint settings-hint-warn settings-hint-block">
+              未检测到可用的 FFmpeg。请安装并加入系统 PATH，或使用下方路径手动指定。
+            </p>
+          ) : null}
           <div className="settings-form">
             <label className="settings-field">
-              <span className="settings-label">FFmpeg 路径</span>
+              <span className="settings-label">FFmpeg 路径（可选）</span>
               <span className="settings-hint">
-                留空则依次尝试：内置 FFmpeg（若安装包已包含）→ 系统 PATH
+                仅在系统 PATH 无法识别或需指定特定版本时填写；留空则自动使用 PATH → 内置
+                FFmpeg（若安装包已包含）
               </span>
               <input
                 className="settings-input-wide"
                 type="text"
                 value={ffmpegPathInput}
                 onChange={(event) => setFfmpegPathInput(event.target.value)}
-                placeholder="例如 D:\Program\ffmpeg\bin\ffmpeg.exe"
+                placeholder="留空以自动使用系统 PATH"
               />
             </label>
             <div className="settings-git-actions">
