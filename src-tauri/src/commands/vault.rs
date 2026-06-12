@@ -1,5 +1,3 @@
-use tauri::State;
-
 use crate::error::AppError;
 use crate::vault::{
     create_vault_document, create_vault_folder, scan_vault, unique_document_name, VaultTreeNode,
