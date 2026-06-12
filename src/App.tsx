@@ -177,8 +177,8 @@ function App() {
   }, [openExternalDocument]);
 
   const forceDestroy = useCallback(async () => {
-    if (saveGuard.shouldBlockClose()) {
-      diag("close", "forceDestroy_blocked_by_saveGuard", saveGuard.getDebugInfo(), "warn");
+    if (useDocumentStore.getState().saveStatus === "saving") {
+      diag("close", "forceDestroy_blocked_saving", {}, "warn");
       return;
     }
     diag("close", "forceDestroy", {}, "warn");
@@ -378,6 +378,10 @@ function App() {
           return;
         }
         event.preventDefault();
+        if (saveGuard.shouldIgnoreSpuriousClose()) {
+          diag("close", "CloseRequested_ignored_spurious_post_save", saveGuard.getDebugInfo());
+          return;
+        }
         const blocked = saveGuard.shouldBlockClose();
         diagSaveCloseState("CloseRequested", { blocked });
         if (blocked) return;

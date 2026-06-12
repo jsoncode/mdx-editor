@@ -2,11 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { flushEditorContentToStore, getEditorFlushStats } from "./editorContent";
 import { useDocumentStore } from "../stores/documentStore";
 
-/** 保存完成后继续屏蔽关闭操作的时长（Windows 保存后可能误发 CloseRequested） */
-const POST_SAVE_CLOSE_GUARD_MS = 15000;
+/** 保存刚结束时忽略误触发的 CloseRequested（仅用于窗口 X 事件，不拦截用户主动退出） */
+const POST_SAVE_SPURIOUS_CLOSE_MS = 500;
 
 let saveDepth = 0;
-let suppressCloseUntil = 0;
+let ignoreCloseUntil = 0;
 
 function logSaveGuard(event: string, detail: Record<string, unknown>, level = "info") {
   void invoke("diagnostic_log", {
@@ -20,13 +20,14 @@ function logSaveGuard(event: string, detail: Record<string, unknown>, level = "i
 export const saveGuard = {
   begin() {
     saveDepth += 1;
-    suppressCloseUntil = Date.now() + POST_SAVE_CLOSE_GUARD_MS;
     logSaveGuard("begin", this.getDebugInfo());
   },
 
   end() {
     saveDepth = Math.max(0, saveDepth - 1);
-    suppressCloseUntil = Date.now() + POST_SAVE_CLOSE_GUARD_MS;
+    if (saveDepth === 0) {
+      ignoreCloseUntil = Date.now() + POST_SAVE_SPURIOUS_CLOSE_MS;
+    }
     logSaveGuard("end", this.getDebugInfo());
   },
 
@@ -34,11 +35,16 @@ export const saveGuard = {
     return saveDepth > 0;
   },
 
+  /** 保存进行中时阻止关闭 */
   shouldBlockClose(): boolean {
     if (saveDepth > 0) return true;
-    if (Date.now() < suppressCloseUntil) return true;
     if (useDocumentStore.getState().saveStatus === "saving") return true;
     return false;
+  },
+
+  /** 保存完成后极短窗口内忽略系统误发的 CloseRequested */
+  shouldIgnoreSpuriousClose(): boolean {
+    return Date.now() < ignoreCloseUntil;
   },
 
   /** 同步启动保存会话（必须在任何 await 之前调用） */
@@ -63,10 +69,11 @@ export const saveGuard = {
   getDebugInfo() {
     return {
       saveDepth,
-      suppressCloseUntil,
-      suppressCloseMsLeft: Math.max(0, suppressCloseUntil - Date.now()),
+      ignoreCloseUntil,
+      ignoreCloseMsLeft: Math.max(0, ignoreCloseUntil - Date.now()),
       isActive: this.isActive(),
       shouldBlockClose: this.shouldBlockClose(),
+      shouldIgnoreSpuriousClose: this.shouldIgnoreSpuriousClose(),
     };
   },
 };

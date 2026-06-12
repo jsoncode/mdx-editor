@@ -888,6 +888,7 @@ body,
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   background: #fff;
 }
 
@@ -1205,41 +1206,20 @@ body,
 .markdown-editor {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
   overflow: hidden;
-}
-
-.markdown-editor .cm-scroller {
-  overflow: auto;
-}
-
-/* 选中文字：语法高亮子元素也强制浅色，保证可读性 */
-.markdown-editor .cm-selectedText,
-.markdown-editor .cm-selectedText .tok-link,
-.markdown-editor .cm-selectedText .tok-emphasis,
-.markdown-editor .cm-selectedText .tok-strong,
-.markdown-editor .cm-selectedText .tok-quote,
-.markdown-editor .cm-selectedText .tok-heading,
-.markdown-editor .cm-selectedText .tok-heading1,
-.markdown-editor .cm-selectedText .tok-heading2,
-.markdown-editor .cm-selectedText .tok-heading3,
-.markdown-editor .cm-selectedText .tok-heading4,
-.markdown-editor .cm-selectedText .tok-heading5,
-.markdown-editor .cm-selectedText .tok-heading6 {
-  color: #ffffff !important;
-  text-decoration-color: rgba(255, 255, 255, 0.85) !important;
-}
-
-.markdown-editor .cm-editor.cm-light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
-.markdown-editor .cm-editor.cm-light > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
-  background-color: #0078d4 !important;
 }
 
 .markdown-editor .cm-editor {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
 }
 
 .markdown-editor .cm-scroller {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .markdown-preview {

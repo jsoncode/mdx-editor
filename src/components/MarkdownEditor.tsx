@@ -137,6 +137,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           codeLanguages: languages,
         }),
         selectionTextPlugin,
+        EditorView.lineWrapping,
         editorTheme,
       ],
       [editorHistoryDepth],
