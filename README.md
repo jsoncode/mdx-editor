@@ -4,10 +4,17 @@
 
 [![GitHub](https://img.shields.io/github/stars/jsoncode/mdx-editor?style=social)](https://github.com/jsoncode/mdx-editor)
 
+## 界面预览
+
+双栏编辑：左侧 Markdown 源码，右侧 GFM 实时预览。
+
+![MDX 编辑器界面演示](./demo.png)
+
 ---
 
 ## 目录
 
+- [界面预览](#界面预览)
 - [功能特性](#功能特性)
 - [MDX 文件格式](#mdx-文件格式)
 - [环境要求](#环境要求)
