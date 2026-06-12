@@ -1,35 +1,106 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
-interface RibbonButtonProps {
-  label: string;
-  onClick: () => void;
-  icon: ReactNode;
-}
-
-export function RibbonButton({ label, onClick, icon }: RibbonButtonProps) {
-  return (
-    <button
-      type="button"
-      className="ribbon-btn"
-      onClick={onClick}
-      title={label}
-    >
-      <span className="ribbon-btn-icon">{icon}</span>
-      <span className="ribbon-btn-label">{label}</span>
-    </button>
-  );
-}
-
-interface RibbonGroupProps {
+interface RibbonMenuProps {
   label: string;
   children: ReactNode;
 }
 
-export function RibbonGroup({ label, children }: RibbonGroupProps) {
+export function RibbonMenu({ label, children }: RibbonMenuProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div className="ribbon-group">
-      <div className="ribbon-group-content">{children}</div>
-      <div className="ribbon-group-label">{label}</div>
+    <div className={`ribbon-menu${open ? " open" : ""}`} ref={rootRef}>
+      <button
+        type="button"
+        className="ribbon-menu-trigger"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        {label}
+        <span className="ribbon-menu-caret" aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="ribbon-dropdown" role="menu">
+          <div
+            onClick={() => setOpen(false)}
+            onKeyDown={() => undefined}
+            role="presentation"
+          >
+            {children}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface RibbonMenuItemProps {
+  label: string;
+  onClick: () => void;
+  icon?: ReactNode;
+}
+
+export function RibbonMenuItem({ label, onClick, icon }: RibbonMenuItemProps) {
+  return (
+    <button
+      type="button"
+      className="ribbon-menu-item"
+      role="menuitem"
+      onClick={onClick}
+    >
+      {icon && <span className="ribbon-menu-item-icon">{icon}</span>}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+interface LayoutToggleProps {
+  mode: "edit" | "preview" | "split";
+  onChange: (mode: "edit" | "preview" | "split") => void;
+}
+
+export function LayoutToggle({ mode, onChange }: LayoutToggleProps) {
+  const items: { id: "edit" | "preview" | "split"; label: string }[] = [
+    { id: "edit", label: "编辑" },
+    { id: "preview", label: "预览" },
+    { id: "split", label: "双栏" },
+  ];
+
+  return (
+    <div className="layout-toggle" role="group" aria-label="布局模式">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={`layout-toggle-btn${mode === item.id ? " active" : ""}`}
+          aria-pressed={mode === item.id}
+          onClick={() => onChange(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -73,6 +144,15 @@ export function IconExport() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 3v12M8 11l4 4 4-4M5 21h14" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+export function IconPrint() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 9V4h10v5M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M7 14h10v6H7z" fill="none" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }

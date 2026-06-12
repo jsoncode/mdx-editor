@@ -3,6 +3,7 @@ import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { buildExportHtml } from "../lib/export";
 import { useDocumentStore } from "../stores/documentStore";
+import { useVaultStore } from "../stores/vaultStore";
 
 export function useDocumentActions(previewHtml: string) {
   const {
@@ -22,6 +23,20 @@ export function useDocumentActions(previewHtml: string) {
   };
 
   const handleNew = async () => {
+    const vaultPath = useVaultStore.getState().vaultPath;
+    if (vaultPath) {
+      try {
+        const path = await useVaultStore.getState().createDocument();
+        if (!path) return;
+        const entries = await openDocument(path);
+        setRecentFiles(entries);
+        await updateTitle(path);
+        await useVaultStore.getState().refreshTree();
+      } catch (error) {
+        await message(String(error), { title: "创建文档失败", kind: "error" });
+      }
+      return;
+    }
     await newDocument();
     await updateTitle(null);
   };
@@ -46,6 +61,7 @@ export function useDocumentActions(previewHtml: string) {
   const handleSave = async () => {
     if (filePath) {
       await saveDocument();
+      await useVaultStore.getState().refreshTree();
       return;
     }
     const selected = await save({
@@ -56,6 +72,7 @@ export function useDocumentActions(previewHtml: string) {
     if (typeof selected === "string") {
       const entries = await saveDocument(selected);
       if (entries) setRecentFiles(entries);
+      await useVaultStore.getState().refreshTree();
       await updateTitle(selected);
     }
   };
@@ -69,6 +86,7 @@ export function useDocumentActions(previewHtml: string) {
     if (typeof selected === "string") {
       const entries = await saveDocument(selected);
       if (entries) setRecentFiles(entries);
+      await useVaultStore.getState().refreshTree();
       await updateTitle(selected);
     }
   };

@@ -8,3 +8,6 @@ export interface RecentFileGroup {
   sortKey: string;
   files: RecentFileEntry[];
 }
+
+export type RecentGroupMode = "year" | "month" | "week" | "directory";
+export type RecentSortMode = "time" | "name";

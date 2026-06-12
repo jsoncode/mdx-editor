@@ -5,6 +5,7 @@ mod error;
 mod launch;
 mod manifest;
 mod mdx;
+mod vault;
 mod workspace;
 
 use launch::{collect_mdx_paths_from_args, handle_open_files, LaunchState};
@@ -58,6 +59,10 @@ pub fn run() {
             commands::autosave_document,
             commands::close_document,
             commands::get_document_manifest,
+            commands::scan_vault_tree,
+            commands::create_vault_folder_cmd,
+            commands::create_vault_document_cmd,
+            commands::suggest_vault_document_name,
             commands::insert_asset_from_path,
             commands::insert_asset_from_bytes,
             commands::read_clipboard_file_paths,

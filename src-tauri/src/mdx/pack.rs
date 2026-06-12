@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 
+use uuid::Uuid;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -9,6 +10,23 @@ use crate::error::{AppError, AppResult};
 use crate::manifest::Manifest;
 use crate::asset_refs::collect_asset_references;
 use crate::workspace::{ASSET_DIR, INDEX_FILE, MANIFEST_FILE};
+
+pub fn create_empty_mdx(output_path: &Path) -> AppResult<()> {
+    let temp = std::env::temp_dir().join(format!("mdx-new-{}", Uuid::new_v4()));
+    fs::create_dir_all(temp.join(ASSET_DIR))?;
+    fs::write(temp.join(INDEX_FILE), "")?;
+
+    let manifest = Manifest::default();
+    fs::write(
+        temp.join(MANIFEST_FILE),
+        serde_json::to_string_pretty(&manifest)?,
+    )?;
+
+    let mut manifest = manifest;
+    pack_workspace(&temp, output_path, &mut manifest)?;
+    let _ = fs::remove_dir_all(&temp);
+    Ok(())
+}
 
 pub fn pack_workspace(workspace_path: &Path, output_path: &Path, manifest: &mut Manifest) -> AppResult<()> {
     manifest.touch();

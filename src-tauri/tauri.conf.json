@@ -40,11 +40,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "icons/mdx-doc.ico": "mdx-doc.ico"
+    },
     "windows": {
       "wix": {
         "language": ["en-US", "zh-CN"]
       },
       "nsis": {
+        "installerHooks": "windows/installer-hooks.nsh",
         "languages": [
           "English",
           "SimpChinese",

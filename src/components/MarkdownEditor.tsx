@@ -5,10 +5,12 @@ import { search } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { editorHighlight, editorTheme } from "../lib/editorTheme";
+import { applyMarkdownFormat, type MarkdownFormatAction } from "../lib/markdownFormat";
 
 export interface MarkdownEditorHandle {
   insertAtCursor: (text: string) => void;
   focus: () => void;
+  applyFormat: (action: MarkdownFormatAction) => void;
 }
 
 interface MarkdownEditorProps {
@@ -61,6 +63,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         view.focus();
       },
       focus: () => editorRef.current?.view?.focus(),
+      applyFormat: (action: MarkdownFormatAction) => {
+        const view = editorRef.current?.view;
+        if (view) applyMarkdownFormat(view, action);
+      },
     }));
 
     useEffect(() => {

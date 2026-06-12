@@ -6,13 +6,17 @@ import {
   getFilePath,
   isInsertableFileName,
   isInsertablePath,
+  isMdxPath,
   MAX_PASTE_BYTES,
   normalizeClipboardPath,
   normalizeImageExt,
 } from "../lib/media";
 import { useDocumentStore } from "../stores/documentStore";
 
-export function useAssetInsert(insertAtCursor: (text: string) => void) {
+export function useAssetInsert(
+  insertAtCursor: (text: string) => void,
+  onOpenMdx?: (path: string) => void | Promise<void>,
+) {
   const workspaceId = useDocumentStore((s) => s.workspaceId);
 
   const insertSnippet = useCallback(
@@ -107,17 +111,22 @@ export function useAssetInsert(insertAtCursor: (text: string) => void) {
       for (const file of files) {
         const path = getFilePath(file);
         if (path) {
+          if (isMdxPath(path)) {
+            await onOpenMdx?.(path);
+            continue;
+          }
           if (isInsertablePath(path)) {
             await insertFromPath(path);
           }
           continue;
         }
+        if (file.name && isMdxPath(file.name)) continue;
         if (!isInsertableFileName(file.name)) continue;
         const bytes = new Uint8Array(await file.arrayBuffer());
         await insertFromBytes(file.name, bytes);
       }
     },
-    [insertFromPath, insertFromBytes],
+    [insertFromPath, insertFromBytes, onOpenMdx],
   );
 
   const handlePaste = useCallback(

@@ -4,14 +4,17 @@ import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Ribbon } from "./components/Ribbon";
+import { EditorLayout } from "./components/EditorLayout";
 import { RecentFilesPage } from "./components/RecentFilesPage";
-import { SplitEditor } from "./components/SplitEditor";
 import { UnsavedDialog } from "./components/UnsavedDialog";
 import { useAutosave } from "./hooks/useAutosave";
+import { usePrintLayout } from "./hooks/usePrintLayout";
 import { useWindowState } from "./hooks/useWindowState";
 import { getRecentFileEntries } from "./lib/recentFiles";
+import { isInsertablePath, isMdxPath } from "./lib/media";
 import { useDocumentStore } from "./stores/documentStore";
 import { useUiStore } from "./stores/uiStore";
+import { useVaultStore } from "./stores/vaultStore";
 import "./App.css";
 
 function App() {
@@ -31,6 +34,9 @@ function App() {
   const searchOpen = useUiStore((s) => s.searchOpen);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const setAppView = useUiStore((s) => s.setAppView);
+  const switchDialogOpen = useUiStore((s) => s.switchDialogOpen);
+  const resolveDocumentSwitch = useUiStore((s) => s.resolveDocumentSwitch);
+  const initializeVault = useVaultStore((s) => s.initialize);
 
   const openExternalDocument = useCallback(async (path: string) => {
     await openDocument(path);
@@ -43,6 +49,7 @@ function App() {
 
   useAutosave();
   useWindowState();
+  const { printDocument } = usePrintLayout();
 
   useEffect(() => {
     isDirtyRef.current = isDirty;
@@ -52,6 +59,7 @@ function App() {
     void (async () => {
       const recent = await getRecentFileEntries();
       setRecentFiles(recent);
+      await initializeVault();
 
       const launchPath = await invoke<string | null>("take_launch_file");
       if (launchPath) {
@@ -60,7 +68,7 @@ function App() {
         await newDocument();
       }
     })();
-  }, [newDocument, openExternalDocument, setRecentFiles]);
+  }, [newDocument, openExternalDocument, setRecentFiles, initializeVault]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -70,6 +78,48 @@ function App() {
     }).then((fn) => {
       unlisten = fn;
     });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [openExternalDocument]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    void getCurrentWindow()
+      .onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type !== "drop") return;
+
+        void (async () => {
+          for (const path of payload.paths) {
+            if (isMdxPath(path)) {
+              await openExternalDocument(path);
+              continue;
+            }
+
+            if (!isInsertablePath(path)) continue;
+
+            const { workspaceId, insertAtCursor } = useDocumentStore.getState();
+            if (!workspaceId || !insertAtCursor) continue;
+
+            try {
+              const snippet = await invoke<string>("insert_asset_from_path", {
+                workspaceId,
+                sourcePath: path,
+              });
+              insertAtCursor(`\n${snippet}\n`);
+              useUiStore.getState().setAppView("editor");
+            } catch (error) {
+              console.warn("拖放插入资源失败:", error);
+            }
+          }
+        })();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
 
     return () => {
       unlisten?.();
@@ -87,7 +137,10 @@ function App() {
         event.preventDefault();
         useUiStore.getState().setSearchOpen(true);
         useUiStore.getState().setAppView("editor");
-        useUiStore.getState().setRibbonTab("view");
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === "p") {
+        event.preventDefault();
+        printDocument();
       }
       if (event.key === "Escape" && searchOpen) {
         setSearchOpen(false);
@@ -95,7 +148,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [saveDocument, searchOpen, setSearchOpen]);
+  }, [saveDocument, searchOpen, setSearchOpen, printDocument]);
 
   const forceDestroy = useCallback(async () => {
     forceClosingRef.current = true;
@@ -151,9 +204,9 @@ function App() {
 
   return (
     <div className="app">
-      <Ribbon previewHtml={previewHtml} />
+      <Ribbon previewHtml={previewHtml} onPrint={printDocument} />
       <main className="main-content">
-        {appView === "editor" ? <SplitEditor /> : <RecentFilesPage />}
+        {appView === "editor" ? <EditorLayout /> : <RecentFilesPage />}
       </main>
 
       <UnsavedDialog
@@ -161,6 +214,15 @@ function App() {
         onSave={() => void handleCloseSave()}
         onDiscard={() => void handleCloseDiscard()}
         onCancel={() => setCloseDialogOpen(false)}
+      />
+
+      <UnsavedDialog
+        open={switchDialogOpen}
+        title="切换文档"
+        message="当前文档有未保存的更改，切换前是否保存？"
+        onSave={() => resolveDocumentSwitch("save")}
+        onDiscard={() => resolveDocumentSwitch("discard")}
+        onCancel={() => resolveDocumentSwitch("cancel")}
       />
     </div>
   );

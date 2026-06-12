@@ -28,42 +28,150 @@ body,
   display: none;
 }
 
-/* Office-style ribbon */
+/* Compact menu bar */
 .ribbon {
   background: #fff;
   border-bottom: 1px solid #d6dce5;
   user-select: none;
 }
 
-.ribbon-tabs {
+.ribbon-bar {
   display: flex;
-  align-items: stretch;
-  gap: 0;
-  padding: 0 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 36px;
+  padding: 0.2rem 0.65rem;
   background: linear-gradient(180deg, #f3f6fb 0%, #e8edf5 100%);
-  border-bottom: 1px solid #d6dce5;
 }
 
-.ribbon-tab {
-  padding: 0.45rem 1rem;
+.ribbon-menus {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.ribbon-menu {
+  position: relative;
+}
+
+.ribbon-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: #333;
+  line-height: 1.2;
+}
+
+.ribbon-menu-trigger:hover,
+.ribbon-menu.open .ribbon-menu-trigger {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: #c8d4e6;
+}
+
+.ribbon-menu.open .ribbon-menu-trigger {
+  color: #2b579a;
+  font-weight: 600;
+}
+
+.ribbon-menu-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid #666;
+  margin-top: 1px;
+}
+
+.ribbon-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 200;
+  min-width: 168px;
+  padding: 0.25rem 0;
+  background: #fff;
+  border: 1px solid #c8d4e6;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.ribbon-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.42rem 0.75rem;
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   color: #333;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  text-align: left;
 }
 
-.ribbon-tab:hover {
-  background: rgba(255, 255, 255, 0.6);
-}
-
-.ribbon-tab.active {
-  background: #fff;
-  border-bottom-color: #2b579a;
+.ribbon-menu-item:hover {
+  background: #e8f0fe;
   color: #2b579a;
-  font-weight: 600;
+}
+
+.ribbon-menu-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ribbon-menu-item-icon svg {
+  width: 14px;
+  height: 14px;
+  color: #2b579a;
+}
+
+.ribbon-menu-divider {
+  height: 1px;
+  margin: 0.25rem 0.5rem;
+  background: #e8ecf2;
+}
+
+.layout-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #c8d4e6;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.layout-toggle-btn {
+  padding: 0.22rem 0.55rem;
+  border: none;
+  border-right: 1px solid #c8d4e6;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: #444;
+  line-height: 1.2;
+}
+
+.layout-toggle-btn:last-child {
+  border-right: none;
+}
+
+.layout-toggle-btn:hover {
+  background: #eef3fb;
+}
+
+.layout-toggle-btn.active {
+  background: #2b579a;
+  color: #fff;
 }
 
 .ribbon-status {
@@ -71,96 +179,10 @@ body,
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0 0.75rem;
+  padding: 0 0.25rem;
   font-size: 12px;
   color: #666;
-}
-
-.ribbon-panel {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  padding: 0.35rem 0.5rem 0.25rem;
-  min-height: 84px;
-  background: #fff;
-}
-
-.ribbon-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0 0.75rem;
-  border-right: 1px solid #e8ecf2;
-}
-
-.ribbon-group:last-child {
-  border-right: none;
-}
-
-.ribbon-group-content {
-  display: flex;
-  align-items: stretch;
-  gap: 0.35rem;
-  flex: 1;
-}
-
-.ribbon-group-label {
-  font-size: 11px;
-  color: #666;
-  text-align: center;
-  padding-top: 0.2rem;
-  flex-shrink: 0;
-}
-
-.ribbon-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  box-sizing: border-box;
-  width: 72px;
-  height: 64px;
-  padding: 0.35rem 0.4rem 0.3rem;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  color: #333;
-  flex-shrink: 0;
-}
-
-.ribbon-btn:hover {
-  background: #e8f0fe;
-  border-color: #c5d9f7;
-}
-
-.ribbon-btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-}
-
-.ribbon-btn-icon svg {
-  display: block;
-  width: 22px;
-  height: 22px;
-  color: #2b579a;
-}
-
-.ribbon-btn-label {
-  display: block;
-  width: 100%;
-  font-size: 11px;
-  line-height: 1.2;
-  height: 13px;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .file-path {
@@ -329,6 +351,353 @@ body,
   min-height: 0;
 }
 
+.split-editor-body > [data-panel-group] {
+  height: 100%;
+}
+
+.editor-layout {
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+.editor-layout > [data-panel-group] {
+  height: 100%;
+}
+
+.sidebar-reopen-btn {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 22px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid #d0d7e2;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  background: #f8f9fb;
+  color: #555;
+  cursor: pointer;
+}
+
+.sidebar-reopen-btn:hover {
+  background: #e8ecf2;
+  color: #2b579a;
+}
+
+.sidebar-reopen-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Workspace sidebar */
+.workspace-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #f3f5f8;
+  border-right: 1px solid #d6dce5;
+}
+
+.workspace-sidebar-header {
+  flex-shrink: 0;
+  padding: 0.65rem 0.5rem 0.5rem;
+  border-bottom: 1px solid #dde3ec;
+  background: #eef2f7;
+}
+
+.workspace-sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+  padding: 0 0.25rem;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2b579a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-vault-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.workspace-sidebar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.workspace-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+}
+
+.workspace-icon-btn:hover {
+  background: #fff;
+  border-color: #c8d4e6;
+  color: #2b579a;
+}
+
+.workspace-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.workspace-sidebar-tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.35rem 0;
+}
+
+.workspace-sidebar-hint {
+  margin: 0.75rem;
+  font-size: 12px;
+  color: #777;
+  line-height: 1.5;
+}
+
+.vault-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 1rem;
+  text-align: center;
+}
+
+.vault-empty p {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.5;
+}
+
+.vault-empty button {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #c8d4e6;
+  border-radius: 6px;
+  background: #2b579a;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.vault-create-folder {
+  padding: 0.5rem;
+  border-bottom: 1px solid #dde3ec;
+  background: #fff;
+}
+
+.vault-create-folder input {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #c8d4e6;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 0.35rem;
+}
+
+.vault-create-folder-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.vault-create-folder-actions button {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #c8d4e6;
+  border-radius: 4px;
+  background: #2b579a;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.vault-create-folder-actions button.secondary {
+  background: #fff;
+  color: #333;
+}
+
+.vault-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vault-tree-item {
+  margin: 0;
+}
+
+.vault-tree-folder-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.vault-tree-toggle {
+  flex-shrink: 0;
+  width: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+}
+
+.vault-tree-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s;
+}
+
+.vault-tree-toggle svg.expanded {
+  transform: rotate(90deg);
+}
+
+.vault-tree-folder,
+.vault-tree-file {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 28px;
+  padding: 0.2rem 0.5rem 0.2rem 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: #333;
+  text-align: left;
+}
+
+.vault-tree-folder svg,
+.vault-tree-file svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #7a8699;
+}
+
+.vault-tree-folder.selected {
+  background: rgba(43, 87, 154, 0.08);
+}
+
+.vault-tree-file:hover,
+.vault-tree-folder:hover {
+  background: rgba(43, 87, 154, 0.06);
+}
+
+.vault-tree-file.active {
+  background: rgba(43, 87, 154, 0.14);
+  color: #2b579a;
+  font-weight: 600;
+}
+
+.vault-tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-resize-handle {
+  width: 3px;
+}
+
+.single-pane {
+  height: 100%;
+}
+
+.single-pane .editor-pane,
+.single-pane .markdown-preview {
+  height: 100%;
+}
+
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #fff;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 8px;
+  background: #f8f9fb;
+  border-bottom: 1px solid #e0e4ea;
+  flex-shrink: 0;
+}
+
+.editor-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #333;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.editor-toolbar-btn:hover {
+  background: #e8ecf2;
+  border-color: #d0d7e2;
+}
+
+.editor-toolbar-btn:active {
+  background: #dce3ed;
+}
+
+.editor-toolbar-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.editor-toolbar-heading {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.editor-toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: #d0d7e2;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.editor-pane .markdown-editor {
+  flex: 1;
+  min-height: 0;
+}
+
 /* Recent files page */
 .recent-page {
   height: 100%;
@@ -384,6 +753,62 @@ body,
   border-color: #e8b4b0;
 }
 
+.recent-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border: 1px solid #e0e4ea;
+  border-radius: 8px;
+}
+
+.recent-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.recent-toolbar-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.recent-option-group {
+  display: inline-flex;
+  border: 1px solid #c8d4e6;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.recent-option-btn {
+  padding: 0.28rem 0.65rem;
+  border: none;
+  border-right: 1px solid #c8d4e6;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: #444;
+  line-height: 1.2;
+}
+
+.recent-option-btn:last-child {
+  border-right: none;
+}
+
+.recent-option-btn:hover {
+  background: #eef3fb;
+}
+
+.recent-option-btn.active {
+  background: #2b579a;
+  color: #fff;
+}
+
 .recent-empty {
   text-align: center;
   padding: 4rem 2rem;
@@ -426,7 +851,8 @@ body,
 
 .recent-list-item {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  min-height: 44px;
   border-bottom: 1px solid #eef1f5;
 }
 
@@ -437,7 +863,7 @@ body,
 .recent-open {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(120px, 200px) 1fr auto;
+  grid-template-columns: minmax(120px, 200px) 1fr;
   gap: 1rem;
   align-items: center;
   padding: 0.65rem 1rem;
@@ -469,13 +895,26 @@ body,
 }
 
 .recent-time {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  align-self: center;
+  min-width: 5.5rem;
+  padding: 0 0.75rem;
   font-size: 12px;
   color: #666;
   white-space: nowrap;
+  text-align: right;
+  line-height: 1;
 }
 
 .recent-remove {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  align-self: center;
+  height: 100%;
+  min-height: 44px;
   padding: 0 1rem;
   border: none;
   border-left: 1px solid #eef1f5;
@@ -483,6 +922,7 @@ body,
   color: #888;
   cursor: pointer;
   font-size: 12px;
+  line-height: 1;
 }
 
 .recent-remove:hover {
@@ -664,4 +1104,83 @@ body,
 
 .dialog-actions button.secondary:hover {
   background: #f5f5f5;
+}
+
+/* Print: hide chrome, show preview only */
+@media print {
+  html,
+  body,
+  #root,
+  .app,
+  .main-content,
+  .split-editor,
+  .split-editor-body,
+  .single-pane {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .ribbon,
+  .search-panel,
+  .editor-toolbar,
+  .workspace-sidebar,
+  .sidebar-reopen-btn,
+  .workspace-resize-handle,
+  .markdown-editor,
+  .resize-handle,
+  .recent-page,
+  .dialog-overlay,
+  .layout-toggle {
+    display: none !important;
+  }
+
+  .markdown-preview {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .markdown-preview img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  .markdown-preview pre,
+  .markdown-preview blockquote,
+  .markdown-preview table {
+    page-break-inside: avoid;
+  }
+
+  .attachment-link {
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: #000;
+  }
+
+  .markdown-preview video,
+  .markdown-preview audio {
+    display: none !important;
+  }
+}
+
+body.printing .ribbon,
+body.printing .search-panel,
+body.printing .editor-toolbar,
+body.printing .workspace-sidebar,
+body.printing .sidebar-reopen-btn,
+body.printing .markdown-editor,
+body.printing .resize-handle,
+body.printing .layout-toggle {
+  display: none !important;
+}
+
+body.printing .markdown-preview {
+  height: 100% !important;
 }

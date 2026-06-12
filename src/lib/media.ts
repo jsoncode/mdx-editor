@@ -73,7 +73,12 @@ export function fileNameFromPath(path: string): string {
   return normalized.split("/").pop() ?? path;
 }
 
+export function isMdxPath(path: string): boolean {
+  return extensionFromPath(path) === "mdx";
+}
+
 export function isInsertablePath(path: string): boolean {
+  if (isMdxPath(path)) return false;
   return fileNameFromPath(path).length > 0;
 }
 
