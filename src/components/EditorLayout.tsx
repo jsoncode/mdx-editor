@@ -3,22 +3,35 @@ import { useVaultStore } from "../stores/vaultStore";
 import { SplitEditor } from "./SplitEditor";
 import { WorkspaceSidebar } from "./WorkspaceSidebar";
 
+const SIDEBAR_PANEL_ID = "workspace-sidebar-panel";
+const EDITOR_PANEL_ID = "editor-main-panel";
+
 export function EditorLayout() {
   const sidebarOpen = useVaultStore((s) => s.sidebarOpen);
   const setSidebarOpen = useVaultStore((s) => s.setSidebarOpen);
 
   return (
     <div className="editor-layout">
-      <Group orientation="horizontal" id="mdx-workspace-layout">
+      <Group
+        orientation="horizontal"
+        id="mdx-workspace-layout"
+        resizeTargetMinimumSize={{ coarse: 28, fine: 8 }}
+      >
         {sidebarOpen && (
           <>
-            <Panel defaultSize={22} minSize={15} maxSize={40} id="workspace-sidebar-panel">
+            <Panel
+              id={SIDEBAR_PANEL_ID}
+              defaultSize={280}
+              minSize={220}
+              maxSize="50%"
+              className="workspace-sidebar-panel"
+            >
               <WorkspaceSidebar />
             </Panel>
             <Separator className="resize-handle workspace-resize-handle" />
           </>
         )}
-        <Panel minSize={40} id="editor-main-panel">
+        <Panel id={EDITOR_PANEL_ID} minSize={400} className="editor-main-panel">
           <SplitEditor />
         </Panel>
       </Group>

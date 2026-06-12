@@ -1,5 +1,7 @@
 import { create } from "zustand";
+import { mkdir } from "@tauri-apps/plugin-fs";
 import {
+  addRecentVault,
   createVaultDocument,
   createVaultFolder,
   getExpandedFolders,
@@ -30,6 +32,7 @@ interface VaultStore {
   refreshTree: () => Promise<void>;
   createFolder: (name: string) => Promise<void>;
   createDocument: (baseName?: string) => Promise<string | null>;
+  createWorkspace: (parentPath: string, name: string) => Promise<void>;
   expandToFile: (filePath: string) => void;
 }
 
@@ -92,6 +95,7 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
     try {
       const tree = await scanVaultTree(path);
       await saveVaultPath(path);
+      await addRecentVault(path);
       set({ tree, vaultPath: path, loading: false });
     } catch (error) {
       console.error("打开工作区失败:", error);
@@ -148,6 +152,16 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
     const absolutePath = await createVaultDocument(vaultPath, relativePath);
     await get().refreshTree();
     return absolutePath;
+  },
+
+  createWorkspace: async (parentPath, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    const separator = parentPath.includes("\\") ? "\\" : "/";
+    const fullPath = `${parentPath.replace(/[/\\]+$/, "")}${separator}${trimmed}`;
+    await mkdir(fullPath, { recursive: true });
+    await get().openVault(fullPath);
   },
 
   expandToFile: (filePath) => {

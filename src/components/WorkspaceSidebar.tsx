@@ -1,9 +1,16 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useVaultActions } from "../hooks/useVaultActions";
+import { useVaultTreeMenu } from "../hooks/useVaultTreeMenu";
 import { useDocumentStore } from "../stores/documentStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { getVaultName } from "../types/vault";
+import {
+  VaultContextMenu,
+  VaultItemInfoDialog,
+  VaultRenameDialog,
+  type VaultContextMenuItem,
+} from "./VaultContextMenu";
 import { FileTree, VaultCreateFolderInput, VaultEmptyState } from "./FileTree";
 
 export function WorkspaceSidebar() {
@@ -27,6 +34,68 @@ export function WorkspaceSidebar() {
     handleNewDocumentInVault,
     handleOpenFileInVault,
   } = useVaultActions();
+
+  const treeMenu = useVaultTreeMenu();
+
+  const contextMenuItems = useMemo((): VaultContextMenuItem[] => {
+    if (!treeMenu.contextMenu) return [];
+
+    const { target } = treeMenu.contextMenu;
+
+    if (target.kind === "file") {
+      return [
+        { id: "open", label: "打开", onClick: () => handleOpenFileInVault(target.path) },
+        { id: "sep-1", separator: true },
+        { id: "rename", label: "重命名", onClick: () => treeMenu.setRenameTarget(target) },
+        { id: "delete", label: "删除", danger: true, onClick: () => void treeMenu.deleteFile(target) },
+        { id: "sep-2", separator: true },
+        { id: "info", label: "查看信息", onClick: () => void treeMenu.showInfo(target) },
+        {
+          id: "reveal",
+          label: "在资源管理器中显示",
+          onClick: () => void treeMenu.revealInExplorer(target.path),
+        },
+        { id: "copy", label: "复制路径", onClick: () => void treeMenu.copyPath(target.path) },
+      ];
+    }
+
+    return [
+      {
+        id: "new-doc",
+        label: "新建文档",
+        onClick: () => {
+          void (async () => {
+            const path = await treeMenu.createDocumentInFolder(target);
+            if (path) handleOpenFileInVault(path);
+          })();
+        },
+      },
+      {
+        id: "new-folder",
+        label: "新建子文件夹",
+        onClick: () => {
+          setSelectedFolder(target.relativePath);
+          setCreatingFolder(true);
+        },
+      },
+      { id: "sep-1", separator: true },
+      { id: "rename", label: "重命名", onClick: () => treeMenu.setRenameTarget(target) },
+      {
+        id: "delete",
+        label: "删除文件夹",
+        danger: true,
+        onClick: () => void treeMenu.deleteFolder(target),
+      },
+      { id: "sep-2", separator: true },
+      { id: "info", label: "查看信息", onClick: () => void treeMenu.showInfo(target) },
+      {
+        id: "reveal",
+        label: "在资源管理器中显示",
+        onClick: () => void treeMenu.revealInExplorer(target.path),
+      },
+      { id: "copy", label: "复制路径", onClick: () => void treeMenu.copyPath(target.path) },
+    ];
+  }, [treeMenu, handleOpenFileInVault, setSelectedFolder]);
 
   if (!vaultPath) {
     return (
@@ -77,9 +146,10 @@ export function WorkspaceSidebar() {
         {loading ? (
           <p className="workspace-sidebar-hint">加载中...</p>
         ) : tree.length === 0 ? (
-          <p className="workspace-sidebar-hint">暂无 MDX 文档，点击上方 + 新建。</p>
+          <p className="workspace-sidebar-hint">暂无文档，点击上方 + 新建。</p>
         ) : (
           <FileTree
+            vaultPath={vaultPath}
             nodes={tree}
             activePath={filePath}
             expandedFolders={expandedFolders}
@@ -87,9 +157,38 @@ export function WorkspaceSidebar() {
             onToggleFolder={toggleFolder}
             onSelectFolder={setSelectedFolder}
             onOpenFile={(path) => void handleOpenFileInVault(path)}
+            onFileContextMenu={(event, node) =>
+              treeMenu.openContextMenu(event, treeMenu.buildFileContextTarget(node.path, node.name))
+            }
+            onFolderContextMenu={(event, node, absolutePath) =>
+              treeMenu.openContextMenu(
+                event,
+                treeMenu.buildFolderContextTarget(absolutePath, node.name, node.relative_path),
+              )
+            }
           />
         )}
       </div>
+
+      {treeMenu.contextMenu && (
+        <VaultContextMenu
+          x={treeMenu.contextMenu.x}
+          y={treeMenu.contextMenu.y}
+          items={contextMenuItems}
+          onClose={treeMenu.closeContextMenu}
+        />
+      )}
+
+      <VaultItemInfoDialog info={treeMenu.infoItem} onClose={() => treeMenu.setInfoItem(null)} />
+      <VaultRenameDialog
+        target={treeMenu.renameTarget}
+        onClose={() => treeMenu.setRenameTarget(null)}
+        onSubmit={(name) => {
+          if (treeMenu.renameTarget) {
+            void treeMenu.submitRename(treeMenu.renameTarget, name);
+          }
+        }}
+      />
     </aside>
   );
 }

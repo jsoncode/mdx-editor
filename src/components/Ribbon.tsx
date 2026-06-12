@@ -27,6 +27,9 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
   const setAppView = useUiStore((s) => s.setAppView);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const setLayoutMode = useUiStore((s) => s.setLayoutMode);
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const setHistoryOpen = useUiStore((s) => s.setHistoryOpen);
+  const setPropertiesOpen = useUiStore((s) => s.setPropertiesOpen);
   const searchOpen = useUiStore((s) => s.searchOpen);
   const layoutMode = useUiStore((s) => s.layoutMode);
 
@@ -53,6 +56,11 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
     setSearchOpen(false);
   };
 
+  const openWelcomePage = () => {
+    useUiStore.getState().showWelcome();
+    setSearchOpen(false);
+  };
+
   const openEditor = () => setAppView("editor");
 
   return (
@@ -66,6 +74,22 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
             <RibbonMenuItem label="另存为" icon={<IconSave />} onClick={() => void actions.handleSaveAs()} />
             <div className="ribbon-menu-divider" role="separator" />
             <RibbonMenuItem label="最近文档" icon={<IconRecent />} onClick={openRecentPage} />
+            <RibbonMenuItem
+              label="历史修改"
+              icon={<IconRecent />}
+              onClick={() => {
+                openEditor();
+                setHistoryOpen(true);
+              }}
+            />
+            <RibbonMenuItem
+              label="文件属性"
+              icon={<IconRecent />}
+              onClick={() => {
+                openEditor();
+                setPropertiesOpen(true);
+              }}
+            />
             <div className="ribbon-menu-divider" role="separator" />
             <RibbonMenuItem label="导出 Markdown" icon={<IconExport />} onClick={() => void actions.handleExportMarkdown()} />
             <RibbonMenuItem label="导出 HTML" icon={<IconExport />} onClick={() => void actions.handleExportHtml()} />
@@ -102,6 +126,7 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
           </RibbonMenu>
 
           <RibbonMenu label="视图">
+            <RibbonMenuItem label="开始页" icon={<IconRecent />} onClick={openWelcomePage} />
             <RibbonMenuItem
               label={searchOpen ? "关闭查找" : "查找"}
               icon={<IconSearch />}
@@ -111,6 +136,14 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
               }}
             />
             <RibbonMenuItem label="最近文档" icon={<IconRecent />} onClick={openRecentPage} />
+          </RibbonMenu>
+
+          <RibbonMenu label="设置">
+            <RibbonMenuItem
+              label="偏好设置"
+              icon={<IconRecent />}
+              onClick={() => setSettingsOpen(true)}
+            />
           </RibbonMenu>
         </nav>
 

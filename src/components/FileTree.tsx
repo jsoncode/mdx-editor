@@ -2,6 +2,7 @@ import { useState } from "react";
 import { isVaultFile, isVaultFolder, type VaultTreeNode } from "../types/vault";
 
 interface FileTreeProps {
+  vaultPath: string;
   nodes: VaultTreeNode[];
   depth?: number;
   activePath: string | null;
@@ -10,9 +11,16 @@ interface FileTreeProps {
   onToggleFolder: (relativePath: string) => void;
   onSelectFolder: (relativePath: string) => void;
   onOpenFile: (path: string) => void;
+  onFileContextMenu: (event: React.MouseEvent, node: Extract<VaultTreeNode, { kind: "file" }>) => void;
+  onFolderContextMenu: (
+    event: React.MouseEvent,
+    node: Extract<VaultTreeNode, { kind: "folder" }>,
+    absolutePath: string,
+  ) => void;
 }
 
 export function FileTree({
+  vaultPath,
   nodes,
   depth = 0,
   activePath,
@@ -21,12 +29,15 @@ export function FileTree({
   onToggleFolder,
   onSelectFolder,
   onOpenFile,
+  onFileContextMenu,
+  onFolderContextMenu,
 }: FileTreeProps) {
   return (
     <ul className="vault-tree" role="tree">
       {nodes.map((node) => (
         <FileTreeNodeItem
           key={isVaultFolder(node) ? `folder:${node.relative_path}` : `file:${node.path}`}
+          vaultPath={vaultPath}
           node={node}
           depth={depth}
           activePath={activePath}
@@ -35,6 +46,8 @@ export function FileTree({
           onToggleFolder={onToggleFolder}
           onSelectFolder={onSelectFolder}
           onOpenFile={onOpenFile}
+          onFileContextMenu={onFileContextMenu}
+          onFolderContextMenu={onFolderContextMenu}
         />
       ))}
     </ul>
@@ -42,6 +55,7 @@ export function FileTree({
 }
 
 function FileTreeNodeItem({
+  vaultPath,
   node,
   depth,
   activePath,
@@ -50,7 +64,10 @@ function FileTreeNodeItem({
   onToggleFolder,
   onSelectFolder,
   onOpenFile,
+  onFileContextMenu,
+  onFolderContextMenu,
 }: {
+  vaultPath: string;
   node: VaultTreeNode;
   depth: number;
   activePath: string | null;
@@ -59,6 +76,12 @@ function FileTreeNodeItem({
   onToggleFolder: (relativePath: string) => void;
   onSelectFolder: (relativePath: string) => void;
   onOpenFile: (path: string) => void;
+  onFileContextMenu: (event: React.MouseEvent, node: Extract<VaultTreeNode, { kind: "file" }>) => void;
+  onFolderContextMenu: (
+    event: React.MouseEvent,
+    node: Extract<VaultTreeNode, { kind: "folder" }>,
+    absolutePath: string,
+  ) => void;
 }) {
   if (isVaultFile(node)) {
     const active = activePath === node.path;
@@ -69,6 +92,7 @@ function FileTreeNodeItem({
           className={`vault-tree-file${active ? " active" : ""}`}
           style={{ paddingLeft: `${12 + depth * 16}px` }}
           onClick={() => onOpenFile(node.path)}
+          onContextMenu={(event) => onFileContextMenu(event, node)}
           title={node.path}
           role="treeitem"
         >
@@ -81,6 +105,7 @@ function FileTreeNodeItem({
 
   const expanded = expandedFolders.has(node.relative_path);
   const selected = selectedFolder === node.relative_path;
+  const folderAbsolutePath = joinVaultPath(vaultPath, node.relative_path);
 
   return (
     <li className="vault-tree-item" role="none">
@@ -101,6 +126,7 @@ function FileTreeNodeItem({
             onSelectFolder(node.relative_path);
             if (!expanded) onToggleFolder(node.relative_path);
           }}
+          onContextMenu={(event) => onFolderContextMenu(event, node, folderAbsolutePath)}
           title={node.relative_path}
           role="treeitem"
           aria-expanded={expanded}
@@ -111,6 +137,7 @@ function FileTreeNodeItem({
       </div>
       {expanded && node.children.length > 0 && (
         <FileTree
+          vaultPath={vaultPath}
           nodes={node.children}
           depth={depth + 1}
           activePath={activePath}
@@ -119,10 +146,19 @@ function FileTreeNodeItem({
           onToggleFolder={onToggleFolder}
           onSelectFolder={onSelectFolder}
           onOpenFile={onOpenFile}
+          onFileContextMenu={onFileContextMenu}
+          onFolderContextMenu={onFolderContextMenu}
         />
       )}
     </li>
   );
+}
+
+function joinVaultPath(vaultPath: string, relativePath: string): string {
+  const base = vaultPath.replace(/[/\\]+$/, "");
+  const relative = relativePath.replace(/^[/\\]+/, "");
+  const separator = base.includes("\\") ? "\\" : "/";
+  return relative ? `${base}${separator}${relative.replace(/\//g, separator)}` : base;
 }
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {

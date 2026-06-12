@@ -8,10 +8,12 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::manifest::Manifest;
+use crate::versions::{self, DocumentHistoryEntry, DocumentVersionsFile};
 
 pub const INDEX_FILE: &str = "index.md";
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const ASSET_DIR: &str = "asset";
+pub use crate::versions::VERSIONS_FILE;
 
 pub struct WorkspaceManager {
     workspaces: Mutex<HashMap<String, WorkspaceInfo>>,
@@ -63,6 +65,7 @@ impl WorkspaceManager {
             serde_json::to_string_pretty(&manifest)?,
         )?;
         fs::write(path.join(INDEX_FILE), "")?;
+        versions::ensure_versions_file(&path)?;
 
         let info = WorkspaceInfo {
             id: id.clone(),
@@ -197,6 +200,27 @@ impl WorkspaceManager {
         }
 
         Ok(deleted)
+    }
+
+    pub fn read_versions(&self, workspace_id: &str) -> AppResult<DocumentVersionsFile> {
+        let info = self.get(workspace_id)?;
+        versions::read_versions(&info.path)
+    }
+
+    pub fn append_version(
+        &self,
+        workspace_id: &str,
+        entry: DocumentHistoryEntry,
+        max_entries: u32,
+    ) -> AppResult<DocumentVersionsFile> {
+        let info = self.get(workspace_id)?;
+        let max = max_entries.clamp(1, 500) as usize;
+        versions::append_version(&info.path, entry, max)
+    }
+
+    pub fn clear_versions(&self, workspace_id: &str) -> AppResult<DocumentVersionsFile> {
+        let info = self.get(workspace_id)?;
+        versions::clear_versions(&info.path)
     }
 }
 

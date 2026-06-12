@@ -77,8 +77,17 @@ export function isMdxPath(path: string): boolean {
   return extensionFromPath(path) === "mdx";
 }
 
+export function isPlainMdPath(path: string): boolean {
+  return extensionFromPath(path) === "md";
+}
+
+export function isMarkdownDocumentPath(path: string): boolean {
+  const ext = extensionFromPath(path);
+  return ext === "md" || ext === "mdx";
+}
+
 export function isInsertablePath(path: string): boolean {
-  if (isMdxPath(path)) return false;
+  if (isMarkdownDocumentPath(path)) return false;
   return fileNameFromPath(path).length > 0;
 }
 

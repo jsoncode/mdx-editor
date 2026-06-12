@@ -24,3 +24,19 @@ export function getVaultName(path: string): string {
   const parts = normalized.split("/");
   return parts[parts.length - 1] || path;
 }
+
+export interface VaultItemInfo {
+  path: string;
+  name: string;
+  relativePath: string;
+  kind: "file" | "folder";
+  sizeBytes?: number | null;
+  modifiedAtMs?: number | null;
+  createdAtMs?: number | null;
+  fileCount?: number | null;
+  folderCount?: number | null;
+}
+
+export type VaultContextTarget =
+  | { kind: "file"; path: string; name: string; relativePath: string }
+  | { kind: "folder"; path: string; name: string; relativePath: string };

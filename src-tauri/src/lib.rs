@@ -4,8 +4,10 @@ mod commands;
 mod error;
 mod launch;
 mod manifest;
+mod manifest_io;
 mod mdx;
 mod vault;
+mod versions;
 mod workspace;
 
 use launch::{collect_mdx_paths_from_args, handle_open_files, LaunchState};
@@ -59,10 +61,20 @@ pub fn run() {
             commands::autosave_document,
             commands::close_document,
             commands::get_document_manifest,
+            commands::apply_document_metadata,
+            commands::set_document_file_path,
+            commands::get_document_versions,
+            commands::append_document_version,
+            commands::clear_document_versions,
             commands::scan_vault_tree,
             commands::create_vault_folder_cmd,
             commands::create_vault_document_cmd,
             commands::suggest_vault_document_name,
+            commands::get_vault_item_info_cmd,
+            commands::delete_vault_file_cmd,
+            commands::delete_vault_folder_cmd,
+            commands::rename_vault_item_cmd,
+            commands::reveal_vault_item_cmd,
             commands::insert_asset_from_path,
             commands::insert_asset_from_bytes,
             commands::read_clipboard_file_paths,

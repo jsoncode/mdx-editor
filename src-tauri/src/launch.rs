@@ -23,6 +23,12 @@ impl LaunchState {
     }
 }
 
+pub fn is_markdown_document_path(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    lower.ends_with(".mdx") || lower.ends_with(".md")
+}
+
+#[allow(dead_code)]
 pub fn is_mdx_path(path: &str) -> bool {
     path.to_lowercase().ends_with(".mdx")
 }
@@ -47,7 +53,7 @@ where
             continue;
         }
         let path = parse_path_arg(&maybe_file);
-        if is_mdx_path(&path) {
+        if is_markdown_document_path(&path) {
             paths.push(path);
         }
     }
@@ -55,8 +61,11 @@ where
 }
 
 pub fn handle_open_files(app: &AppHandle, paths: Vec<String>, notify_frontend: bool) {
-    let mdx_paths: Vec<String> = paths.into_iter().filter(|p| is_mdx_path(p)).collect();
-    let Some(path) = mdx_paths.into_iter().next() else {
+    let document_paths: Vec<String> = paths
+        .into_iter()
+        .filter(|p| is_markdown_document_path(p))
+        .collect();
+    let Some(path) = document_paths.into_iter().next() else {
         focus_main_window(app);
         return;
     };
@@ -84,6 +93,6 @@ pub fn paths_from_opened_urls(urls: Vec<url::Url>) -> Vec<String> {
     urls.into_iter()
         .filter_map(|url| url.to_file_path().ok())
         .map(|path: PathBuf| path.to_string_lossy().to_string())
-        .filter(|path| is_mdx_path(path))
+        .filter(|path| is_markdown_document_path(path))
         .collect()
 }

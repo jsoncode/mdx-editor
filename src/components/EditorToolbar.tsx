@@ -1,5 +1,6 @@
 import type { ReactNode, RefObject } from "react";
 import type { MarkdownFormatAction } from "../lib/markdownFormat";
+import { runRedo, runUndo } from "../lib/editorHistory";
 import { useEditorStore } from "../stores/editorStore";
 import { applyMarkdownFormat } from "../lib/markdownFormat";
 import type { MarkdownEditorHandle } from "./MarkdownEditor";
@@ -10,6 +11,7 @@ interface ToolbarItem {
   title: string;
   icon: ReactNode;
   onClick?: () => void;
+  disabled?: boolean;
 }
 
 interface EditorToolbarProps {
@@ -23,11 +25,13 @@ function ToolbarButton({
   label,
   icon,
   onClick,
+  disabled = false,
 }: {
   title: string;
   label: string;
   icon: ReactNode;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -35,6 +39,7 @@ function ToolbarButton({
       className="editor-toolbar-btn"
       title={title}
       aria-label={label}
+      disabled={disabled}
       onClick={onClick}
     >
       {icon}
@@ -52,6 +57,8 @@ export function EditorToolbar({
   onInsertMedia,
 }: EditorToolbarProps) {
   const view = useEditorStore((s) => s.view);
+  const canUndo = useEditorStore((s) => s.canUndo);
+  const canRedo = useEditorStore((s) => s.canRedo);
 
   const runFormat = (action: MarkdownFormatAction) => {
     if (view && applyMarkdownFormat(view, action)) return;
@@ -59,6 +66,27 @@ export function EditorToolbar({
   };
 
   const items: (ToolbarItem | "divider")[] = [
+    {
+      label: "撤销",
+      title: "撤销 (Ctrl+Z)",
+      icon: <UndoIcon />,
+      onClick: () => {
+        if (view) runUndo(view);
+        else editorRef.current?.undo();
+      },
+      disabled: !canUndo,
+    },
+    {
+      label: "重做",
+      title: "重做 (Ctrl+Y)",
+      icon: <RedoIcon />,
+      onClick: () => {
+        if (view) runRedo(view);
+        else editorRef.current?.redo();
+      },
+      disabled: !canRedo,
+    },
+    "divider",
     {
       action: "bold",
       label: "粗体",
@@ -232,10 +260,41 @@ export function EditorToolbar({
             title={item.title}
             label={item.label}
             icon={item.icon}
+            disabled={item.disabled}
             onClick={handleClick}
           />
         );
       })}
     </div>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M9 7H5v4M5 11c1.5-3 4.5-5 8-5 4.4 0 8 3.6 8 8s-3.6 8-8 8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M15 7h4v4M19 11c-1.5-3-4.5-5-8-5-4.4 0-8 3.6-8 8s3.6 8 8 8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

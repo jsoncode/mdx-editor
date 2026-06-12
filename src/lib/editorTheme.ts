@@ -46,6 +46,19 @@ export const editorTheme = EditorView.theme({
   ".cm-activeLine": {
     backgroundColor: "#f5f8ff",
   },
+  ".cm-selectionBackground": {
+    backgroundColor: "#0078d4 !important",
+  },
+  "&.cm-focused .cm-selectionBackground": {
+    backgroundColor: "#0078d4 !important",
+  },
+  "&:not(.cm-focused) .cm-selectionBackground": {
+    backgroundColor: "#b4d7fe !important",
+  },
+  ".cm-content ::selection": {
+    backgroundColor: "#0078d4 !important",
+    color: "#ffffff",
+  },
   ".cm-line": {
     padding: "0 4px",
   },

@@ -6,15 +6,23 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Ribbon } from "./components/Ribbon";
 import { EditorLayout } from "./components/EditorLayout";
 import { RecentFilesPage } from "./components/RecentFilesPage";
+import { WelcomePage } from "./components/WelcomePage";
 import { UnsavedDialog } from "./components/UnsavedDialog";
+import { SettingsDialog } from "./components/SettingsDialog";
+import { DocumentHistoryDialog } from "./components/DocumentHistoryDialog";
+import { DocumentPropertiesDialog } from "./components/DocumentPropertiesDialog";
 import { useAutosave } from "./hooks/useAutosave";
+import { useDocumentActions } from "./hooks/useDocumentActions";
 import { usePrintLayout } from "./hooks/usePrintLayout";
 import { useWindowState } from "./hooks/useWindowState";
 import { getRecentFileEntries } from "./lib/recentFiles";
-import { isInsertablePath, isMdxPath } from "./lib/media";
+import { isInsertablePath, isMarkdownDocumentPath } from "./lib/media";
+import { MARKDOWN_DOCUMENT_SAVE_FILTERS, defaultSavePath, isPlainMdPath } from "./lib/documentPaths";
+import { promptPlainMdSaveChoice } from "./lib/savePrompt";
 import { useDocumentStore } from "./stores/documentStore";
 import { useUiStore } from "./stores/uiStore";
 import { useVaultStore } from "./stores/vaultStore";
+import { useSettingsStore } from "./stores/settingsStore";
 import "./App.css";
 
 function App() {
@@ -25,31 +33,40 @@ function App() {
   const isDirty = useDocumentStore((s) => s.isDirty);
   const previewHtml = useDocumentStore((s) => s.previewHtml);
   const filePath = useDocumentStore((s) => s.filePath);
-  const newDocument = useDocumentStore((s) => s.newDocument);
+  const workspaceId = useDocumentStore((s) => s.workspaceId);
   const openDocument = useDocumentStore((s) => s.openDocument);
   const saveDocument = useDocumentStore((s) => s.saveDocument);
   const setRecentFiles = useDocumentStore((s) => s.setRecentFiles);
   const resetDirty = useDocumentStore((s) => s.resetDirty);
   const appView = useUiStore((s) => s.appView);
   const searchOpen = useUiStore((s) => s.searchOpen);
+  const settingsOpen = useUiStore((s) => s.settingsOpen);
+  const manifest = useDocumentStore((s) => s.manifest);
+  const historyOpen = useUiStore((s) => s.historyOpen);
+  const propertiesOpen = useUiStore((s) => s.propertiesOpen);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const setAppView = useUiStore((s) => s.setAppView);
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const setHistoryOpen = useUiStore((s) => s.setHistoryOpen);
+  const setPropertiesOpen = useUiStore((s) => s.setPropertiesOpen);
   const switchDialogOpen = useUiStore((s) => s.switchDialogOpen);
   const resolveDocumentSwitch = useUiStore((s) => s.resolveDocumentSwitch);
   const initializeVault = useVaultStore((s) => s.initialize);
+  const initializeSettings = useSettingsStore((s) => s.initialize);
 
   const openExternalDocument = useCallback(async (path: string) => {
     await openDocument(path);
-    setAppView("editor");
+    useUiStore.getState().enterEditor();
     setSearchOpen(false);
     await getCurrentWindow().setTitle(
       `MDX Editor - ${path.split(/[/\\]/).pop()}`,
     );
-  }, [openDocument, setAppView, setSearchOpen]);
+  }, [openDocument, setSearchOpen]);
 
   useAutosave();
   useWindowState();
   const { printDocument } = usePrintLayout();
+  const { handleNew, handleOpen } = useDocumentActions(previewHtml);
 
   useEffect(() => {
     isDirtyRef.current = isDirty;
@@ -59,16 +76,16 @@ function App() {
     void (async () => {
       const recent = await getRecentFileEntries();
       setRecentFiles(recent);
-      await initializeVault();
+      await Promise.all([initializeVault(), initializeSettings()]);
 
       const launchPath = await invoke<string | null>("take_launch_file");
       if (launchPath) {
         await openExternalDocument(launchPath);
       } else {
-        await newDocument();
+        setAppView("welcome");
       }
     })();
-  }, [newDocument, openExternalDocument, setRecentFiles, initializeVault]);
+  }, [openExternalDocument, setRecentFiles, initializeVault, initializeSettings, setAppView]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -94,7 +111,7 @@ function App() {
 
         void (async () => {
           for (const path of payload.paths) {
-            if (isMdxPath(path)) {
+            if (isMarkdownDocumentPath(path)) {
               await openExternalDocument(path);
               continue;
             }
@@ -128,6 +145,16 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "n") {
+        event.preventDefault();
+        void handleNew();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === "o") {
+        event.preventDefault();
+        void handleOpen();
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
         event.preventDefault();
         void saveDocument();
@@ -148,7 +175,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [saveDocument, searchOpen, setSearchOpen, printDocument]);
+  }, [saveDocument, searchOpen, setSearchOpen, printDocument, handleNew, handleOpen]);
 
   const forceDestroy = useCallback(async () => {
     forceClosingRef.current = true;
@@ -181,11 +208,24 @@ function App() {
       if (!filePath) {
         const selected = await save({
           title: "保存文档",
-          filters: [{ name: "MDX 文档", extensions: ["mdx"] }],
-          defaultPath: "未命名文档.mdx",
+          filters: [...MARKDOWN_DOCUMENT_SAVE_FILTERS],
+          defaultPath: defaultSavePath(null, "mdx"),
         });
         if (typeof selected !== "string") return;
         await saveDocument(selected);
+      } else if (isPlainMdPath(filePath)) {
+        const choice = await promptPlainMdSaveChoice();
+        if (choice === "mdx") {
+          const selected = await save({
+            title: "另存为 MDX",
+            filters: [{ name: "MDX 文档", extensions: ["mdx"] }],
+            defaultPath: defaultSavePath(filePath, "mdx"),
+          });
+          if (typeof selected !== "string") return;
+          await saveDocument(selected);
+        } else {
+          await saveDocument();
+        }
       } else {
         await saveDocument();
       }
@@ -206,7 +246,9 @@ function App() {
     <div className="app">
       <Ribbon previewHtml={previewHtml} onPrint={printDocument} />
       <main className="main-content">
-        {appView === "editor" ? <EditorLayout /> : <RecentFilesPage />}
+        {appView === "welcome" && <WelcomePage />}
+        {appView === "editor" && <EditorLayout />}
+        {appView === "recent" && <RecentFilesPage />}
       </main>
 
       <UnsavedDialog
@@ -223,6 +265,25 @@ function App() {
         onSave={() => resolveDocumentSwitch("save")}
         onDiscard={() => resolveDocumentSwitch("discard")}
         onCancel={() => resolveDocumentSwitch("cancel")}
+      />
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <DocumentHistoryDialog
+        open={historyOpen}
+        workspaceId={workspaceId}
+        filePath={filePath}
+        onClose={() => setHistoryOpen(false)}
+        onPersistHistory={async () => {
+          if (!filePath) return;
+          await saveDocument();
+        }}
+      />
+      <DocumentPropertiesDialog
+        open={propertiesOpen}
+        workspaceId={workspaceId}
+        filePath={filePath}
+        manifest={manifest}
+        onClose={() => setPropertiesOpen(false)}
       />
     </div>
   );

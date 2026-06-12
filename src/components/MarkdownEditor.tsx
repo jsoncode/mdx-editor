@@ -1,16 +1,29 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import CodeMirror, { ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import type { EditorView } from "@codemirror/view";
+import { Compartment } from "@codemirror/state";
+import { EditorView, keymap } from "@codemirror/view";
+import { history as cmHistory, historyKeymap } from "@codemirror/commands";
 import { search } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
+import { runRedo, runUndo } from "../lib/editorHistory";
 import { editorHighlight, editorTheme } from "../lib/editorTheme";
 import { applyMarkdownFormat, type MarkdownFormatAction } from "../lib/markdownFormat";
+import { useEditorStore } from "../stores/editorStore";
+import { useSettingsStore } from "../stores/settingsStore";
+
+const historyStateListener = EditorView.updateListener.of((update) => {
+  if (update.docChanged || update.transactions.length > 0) {
+    useEditorStore.getState().syncHistoryState(update.state);
+  }
+});
 
 export interface MarkdownEditorHandle {
   insertAtCursor: (text: string) => void;
   focus: () => void;
   applyFormat: (action: MarkdownFormatAction) => void;
+  undo: () => void;
+  redo: () => void;
 }
 
 interface MarkdownEditorProps {
@@ -26,6 +39,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const editorRef = useRef<ReactCodeMirrorRef>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const suppressChangeRef = useRef(false);
+    const historyCompartmentRef = useRef(new Compartment());
+    const editorHistoryDepth = useSettingsStore((s) => s.editorHistoryDepth);
 
     const handleChange = useCallback(
       (next: string) => {
@@ -67,6 +82,14 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         const view = editorRef.current?.view;
         if (view) applyMarkdownFormat(view, action);
       },
+      undo: () => {
+        const view = editorRef.current?.view;
+        if (view) runUndo(view);
+      },
+      redo: () => {
+        const view = editorRef.current?.view;
+        if (view) runRedo(view);
+      },
     }));
 
     useEffect(() => {
@@ -84,6 +107,32 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       return () => container.removeEventListener("paste", handler, true);
     }, [onPaste]);
 
+    useEffect(() => {
+      const view = editorRef.current?.view;
+      if (!view) return;
+      view.dispatch({
+        effects: historyCompartmentRef.current.reconfigure(
+          cmHistory({ minDepth: editorHistoryDepth }),
+        ),
+      });
+    }, [editorHistoryDepth]);
+
+    const extensions = useMemo(
+      () => [
+        editorTheme,
+        editorHighlight,
+        historyCompartmentRef.current.of(cmHistory({ minDepth: editorHistoryDepth })),
+        keymap.of(historyKeymap),
+        historyStateListener,
+        search(),
+        markdown({
+          base: markdownLanguage,
+          codeLanguages: languages,
+        }),
+      ],
+      [editorHistoryDepth],
+    );
+
     return (
       <div
         ref={containerRef}
@@ -95,21 +144,16 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           ref={editorRef}
           value={value}
           height="100%"
-          extensions={[
-            editorTheme,
-            editorHighlight,
-            search({ top: false }),
-            markdown({
-              base: markdownLanguage,
-              codeLanguages: languages,
-            }),
-          ]}
+          extensions={extensions}
           onChange={handleChange}
           onCreateEditor={onCreateEditor}
           basicSetup={{
             lineNumbers: true,
             foldGutter: true,
             highlightActiveLine: true,
+            searchKeymap: false,
+            history: false,
+            historyKeymap: false,
           }}
         />
       </div>

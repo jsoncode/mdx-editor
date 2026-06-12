@@ -29,7 +29,8 @@ export function RecentFilesPage() {
   const [groupMode, setGroupMode] = useState<RecentGroupMode>("month");
   const [sortMode, setSortMode] = useState<RecentSortMode>("time");
   const setRecentFiles = useDocumentStore((s) => s.setRecentFiles);
-  const setAppView = useUiStore((s) => s.setAppView);
+  const showWelcome = useUiStore((s) => s.showWelcome);
+  const enterEditor = useUiStore((s) => s.enterEditor);
   const { handleOpenPath } = useDocumentActions("");
 
   const groups = useMemo(
@@ -49,7 +50,6 @@ export function RecentFilesPage() {
 
   const handleOpen = async (path: string) => {
     await handleOpenPath(path);
-    setAppView("editor");
   };
 
   const handleRemove = async (path: string) => {
@@ -72,8 +72,11 @@ export function RecentFilesPage() {
           <p>浏览您打开过的 MDX 文档，共 {entries.length} 个</p>
         </div>
         <div className="recent-page-actions">
-          <button type="button" className="secondary" onClick={() => setAppView("editor")}>
+          <button type="button" className="secondary" onClick={() => enterEditor()}>
             返回编辑
+          </button>
+          <button type="button" className="secondary" onClick={showWelcome}>
+            开始页
           </button>
           {entries.length > 0 && (
             <button type="button" className="danger" onClick={() => void handleClear()}>
@@ -123,7 +126,7 @@ export function RecentFilesPage() {
       {entries.length === 0 ? (
         <div className="recent-empty">
           <p>暂无最近打开的文档</p>
-          <button type="button" onClick={() => setAppView("editor")}>
+          <button type="button" onClick={() => enterEditor()}>
             开始编辑
           </button>
         </div>

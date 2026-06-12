@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { clearAssetCache } from "../lib/assetResolver";
+import { applyDocumentMetadata } from "../lib/documentMetadata";
+import { recordDocumentHistory } from "../lib/documentHistory";
 import { addRecentFile } from "../lib/recentFiles";
 import type { DocumentState, Manifest, SaveStatus } from "../types/document";
 import type { RecentFileEntry } from "../types/recent";
+import { useSettingsStore } from "./settingsStore";
 
 interface DocumentStore {
   workspaceId: string | null;
@@ -28,6 +31,9 @@ interface DocumentStore {
   autosaveDocument: () => Promise<void>;
   syncContent: () => Promise<void>;
   resetDirty: () => void;
+  setFilePath: (filePath: string | null) => void;
+  setManifest: (manifest: Manifest) => void;
+  refreshManifest: () => Promise<void>;
 }
 
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
@@ -114,11 +120,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   saveDocument: async (path?: string) => {
-    const { workspaceId, content } = get();
+    const { workspaceId, content, savedContent } = get();
     if (!workspaceId) return null;
 
     set({ saveStatus: "saving" });
     await invoke("update_document_content", { workspaceId, content });
+
+    const { recordDeviceInfo, recordLocation, documentHistoryDepth } =
+      useSettingsStore.getState();
+    const manifest = await applyDocumentMetadata(
+      workspaceId,
+      recordDeviceInfo,
+      recordLocation,
+    );
+
+    if (savedContent !== content) {
+      await recordDocumentHistory(workspaceId, savedContent, content, documentHistoryDepth);
+    }
+
     const savedPath = await invoke<string>("save_document", {
       workspaceId,
       path: path ?? null,
@@ -129,6 +148,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({
         filePath: savedPath,
         savedContent: content,
+        manifest,
         isDirty: false,
         saveStatus: "saved",
         recentFiles,
@@ -161,5 +181,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   resetDirty: () => {
     const { content } = get();
     set({ savedContent: content, isDirty: false, saveStatus: "saved" });
+  },
+
+  setFilePath: (filePath) => set({ filePath }),
+
+  setManifest: (manifest) => set({ manifest }),
+
+  refreshManifest: async () => {
+    const { workspaceId } = get();
+    if (!workspaceId) return;
+    const manifest = await invoke<Manifest>("get_document_manifest", { workspaceId });
+    set({ manifest });
   },
 }));

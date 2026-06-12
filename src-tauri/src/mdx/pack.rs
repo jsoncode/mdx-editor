@@ -9,7 +9,7 @@ use zip::{CompressionMethod, ZipWriter};
 use crate::error::{AppError, AppResult};
 use crate::manifest::Manifest;
 use crate::asset_refs::collect_asset_references;
-use crate::workspace::{ASSET_DIR, INDEX_FILE, MANIFEST_FILE};
+use crate::workspace::{ASSET_DIR, INDEX_FILE, MANIFEST_FILE, VERSIONS_FILE};
 
 pub fn create_empty_mdx(output_path: &Path) -> AppResult<()> {
     let temp = std::env::temp_dir().join(format!("mdx-new-{}", Uuid::new_v4()));
@@ -21,6 +21,7 @@ pub fn create_empty_mdx(output_path: &Path) -> AppResult<()> {
         temp.join(MANIFEST_FILE),
         serde_json::to_string_pretty(&manifest)?,
     )?;
+    crate::versions::ensure_versions_file(&temp)?;
 
     let mut manifest = manifest;
     pack_workspace(&temp, output_path, &mut manifest)?;
@@ -56,6 +57,11 @@ pub fn pack_workspace(workspace_path: &Path, output_path: &Path, manifest: &mut 
         &workspace_path.join(MANIFEST_FILE),
         options,
     )?;
+
+    let versions_path = workspace_path.join(VERSIONS_FILE);
+    if versions_path.exists() {
+        add_file_to_zip(&mut zip, VERSIONS_FILE, &versions_path, options)?;
+    }
 
     let index_content = fs::read_to_string(&index_path)?;
     let asset_refs = collect_asset_references(&index_content);

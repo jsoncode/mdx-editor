@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
-import type { VaultTreeNode } from "../types/vault";
+import type { VaultTreeNode, VaultItemInfo } from "../types/vault";
 
 const STORE_PATH = "settings.json";
 const VAULT_PATH_KEY = "vault_path";
 const VAULT_EXPANDED_KEY = "vault_expanded_folders";
 const SIDEBAR_OPEN_KEY = "vault_sidebar_open";
+const RECENT_VAULTS_KEY = "recent_vaults";
+const MAX_RECENT_VAULTS = 10;
 
 async function getStore() {
   return load(STORE_PATH, { autoSave: true, defaults: {} });
@@ -51,6 +53,29 @@ export async function saveSidebarOpen(open: boolean): Promise<void> {
   await store.save();
 }
 
+export async function getRecentVaults(): Promise<string[]> {
+  const store = await getStore();
+  const value = await store.get<string[]>(RECENT_VAULTS_KEY);
+  return Array.isArray(value) ? value : [];
+}
+
+export async function addRecentVault(path: string): Promise<string[]> {
+  const store = await getStore();
+  const current = (await store.get<string[]>(RECENT_VAULTS_KEY)) ?? [];
+  const next = [path, ...current.filter((item) => item !== path)].slice(0, MAX_RECENT_VAULTS);
+  await store.set(RECENT_VAULTS_KEY, next);
+  await store.save();
+  return next;
+}
+
+export async function removeRecentVault(path: string): Promise<string[]> {
+  const store = await getStore();
+  const next = ((await store.get<string[]>(RECENT_VAULTS_KEY)) ?? []).filter((item) => item !== path);
+  await store.set(RECENT_VAULTS_KEY, next);
+  await store.save();
+  return next;
+}
+
 export async function scanVaultTree(vaultPath: string): Promise<VaultTreeNode[]> {
   return invoke<VaultTreeNode[]>("scan_vault_tree", { vaultPath });
 }
@@ -83,4 +108,46 @@ export function isPathInVault(filePath: string | null, vaultPath: string | null)
   const normalizedFile = filePath.replace(/\\/g, "/").toLowerCase();
   const normalizedVault = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
   return normalizedFile.startsWith(`${normalizedVault}/`) || normalizedFile === normalizedVault;
+}
+
+export async function getVaultItemInfo(
+  vaultPath: string,
+  itemPath: string,
+): Promise<VaultItemInfo> {
+  return invoke("get_vault_item_info_cmd", { vaultPath, itemPath });
+}
+
+export async function deleteVaultFile(vaultPath: string, filePath: string): Promise<void> {
+  await invoke("delete_vault_file_cmd", { vaultPath, filePath });
+}
+
+export async function deleteVaultFolder(vaultPath: string, relativePath: string): Promise<void> {
+  await invoke("delete_vault_folder_cmd", { vaultPath, relativePath });
+}
+
+export async function renameVaultItem(
+  vaultPath: string,
+  relativePath: string,
+  newName: string,
+  isFolder: boolean,
+): Promise<string> {
+  return invoke<string>("rename_vault_item_cmd", {
+    vaultPath,
+    relativePath,
+    newName,
+    isFolder,
+  });
+}
+
+export async function revealVaultItem(itemPath: string): Promise<void> {
+  await invoke("reveal_vault_item_cmd", { itemPath });
+}
+
+export function getRelativeVaultPath(vaultPath: string, itemPath: string): string {
+  const normalizedVault = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedItem = itemPath.replace(/\\/g, "/");
+  if (normalizedItem.toLowerCase().startsWith(`${normalizedVault.toLowerCase()}/`)) {
+    return normalizedItem.slice(normalizedVault.length + 1);
+  }
+  return normalizedItem;
 }
