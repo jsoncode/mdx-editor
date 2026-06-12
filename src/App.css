@@ -1296,6 +1296,15 @@ body,
   color: var(--text-muted, #888);
 }
 
+.markdown-preview .media-prewarm-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #888);
+  background: var(--surface-muted, rgba(128, 128, 128, 0.08));
+  border-radius: 6px;
+}
+
 .attachment-link {
   display: inline-flex;
   align-items: center;

@@ -2,6 +2,8 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 use tauri::AppHandle;
 use tauri::Manager;
@@ -12,9 +14,11 @@ use crate::workspace::{extension_from_path, is_audio_ext, is_video_ext};
 
 const CACHE_DIR_NAME: &str = "media-preview-cache";
 const SIDECAR_NAME: &str = "binaries/ffmpeg";
+const TRANSCODE_WAIT_MS: u64 = 100;
+const TRANSCODE_WAIT_ATTEMPTS: u32 = 600;
 
 /// 浏览器可直接播放、无需 FFmpeg 的扩展名
-fn is_direct_playable(ext: &str) -> bool {
+pub fn is_direct_playable(ext: &str) -> bool {
     matches!(
         ext,
         "mp3" | "wav" | "ogg" | "oga" | "opus" | "weba" | "mp4" | "webm" | "m4a" | "flac" | "aac"
@@ -44,6 +48,51 @@ fn cache_token(source: &Path) -> AppResult<String> {
     meta.len().hash(&mut hasher);
     modified.hash(&mut hasher);
     Ok(format!("{:016x}", hasher.finish()))
+}
+
+fn transcode_lock_path(output: &Path) -> PathBuf {
+    output.with_extension("transcoding.lock")
+}
+
+fn wait_for_cached_output(output: &Path) -> Option<PathBuf> {
+    for _ in 0..TRANSCODE_WAIT_ATTEMPTS {
+        if output.is_file() {
+            return Some(output.to_path_buf());
+        }
+        thread::sleep(Duration::from_millis(TRANSCODE_WAIT_MS));
+    }
+    None
+}
+
+fn acquire_transcode_lock(output: &Path) -> AppResult<bool> {
+    if output.is_file() {
+        return Ok(false);
+    }
+
+    let lock = transcode_lock_path(output);
+    match fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&lock)
+    {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            if wait_for_cached_output(output).is_some() {
+                let _ = fs::remove_file(&lock);
+                return Ok(false);
+            }
+            Err(AppError::Other(format!(
+                "等待其他转码任务超时: {}",
+                output.display()
+            )))
+        }
+        Err(error) => Err(AppError::Io(error)),
+    }
+}
+
+fn release_transcode_lock(output: &Path) {
+    let lock = transcode_lock_path(output);
+    let _ = fs::remove_file(lock);
 }
 
 fn normalize_user_ffmpeg_path(raw: &str) -> Option<PathBuf> {
@@ -183,7 +232,19 @@ pub fn resolve_preview_path(
         return Ok(cached);
     }
 
-    run_ffmpeg_transcode(app, user_path, source, &cached, &ext)?;
+    let should_transcode = acquire_transcode_lock(&cached)?;
+    if !should_transcode {
+        if cached.is_file() {
+            return Ok(cached);
+        }
+        return wait_for_cached_output(&cached).ok_or_else(|| {
+            AppError::Other(format!("转码未完成: {}", cached.display()))
+        });
+    }
+
+    let transcode_result = run_ffmpeg_transcode(app, user_path, source, &cached, &ext);
+    release_transcode_lock(&cached);
+    transcode_result?;
     Ok(cached)
 }
 

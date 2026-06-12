@@ -2,8 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use tauri::State;
-use uuid::Uuid;
 
+use crate::asset_store::{store_asset_from_bytes, store_asset_from_path};
 use crate::error::AppError;
 use crate::workspace::{
     extension_from_path, markdown_snippet_for_asset, ASSET_DIR, WorkspaceManager,
@@ -21,12 +21,8 @@ pub fn insert_asset_from_path(
     }
 
     let ext = extension_from_path(&source);
-    let filename = format!("{}.{}", &Uuid::new_v4().to_string()[..8], ext);
-    let relative_path = format!("{ASSET_DIR}/{filename}");
-
     let asset_dir = workspaces.asset_dir(&workspace_id)?;
-    let dest = asset_dir.join(&filename);
-    fs::copy(&source, &dest)?;
+    let relative_path = store_asset_from_path(&asset_dir, &source)?;
 
     let display_name = source
         .file_name()
@@ -48,12 +44,8 @@ pub fn insert_asset_from_bytes(
     bytes: Vec<u8>,
 ) -> Result<String, AppError> {
     let ext = extension_from_path(PathBuf::from(&filename).as_path());
-    let stored_name = format!("{}.{}", &Uuid::new_v4().to_string()[..8], ext);
-    let relative_path = format!("{ASSET_DIR}/{stored_name}");
-
     let asset_dir = workspaces.asset_dir(&workspace_id)?;
-    let dest = asset_dir.join(&stored_name);
-    fs::write(dest, bytes)?;
+    let relative_path = store_asset_from_bytes(&asset_dir, &bytes, &ext)?;
 
     let display_name = PathBuf::from(&filename)
         .file_name()

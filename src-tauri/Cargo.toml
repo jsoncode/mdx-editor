@@ -29,6 +29,7 @@ chrono = { version = "0.4", features = ["serde"] }
 git2 = "0.20"
 thiserror = "2"
 which = "7"
+md-5 = "0.10"
 [target.'cfg(windows)'.dependencies]
 clipboard-win = "5"
 webview2-com = "0.38"

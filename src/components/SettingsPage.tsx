@@ -15,7 +15,9 @@ import {
   MAX_HISTORY_DEPTH,
   MIN_HISTORY_DEPTH,
 } from "../lib/settings";
+import { useDocumentStore } from "../stores/documentStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { cancelMediaPrewarm, prewarmDocumentMedia } from "../lib/mediaPrewarm";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
 import type { GitSyncSettings } from "../types/settings";
@@ -122,6 +124,11 @@ export function SettingsPage() {
     }).then(() => {
       setSavedHint(true);
       window.setTimeout(() => setSavedHint(false), 2000);
+      const { workspaceId, content } = useDocumentStore.getState();
+      if (workspaceId) {
+        cancelMediaPrewarm();
+        void prewarmDocumentMedia(workspaceId, content, ffmpegPathInput);
+      }
     });
   };
 

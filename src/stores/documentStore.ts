@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { clearAssetCache } from "../lib/assetResolver";
+import { cancelMediaPrewarm, prewarmDocumentMedia } from "../lib/mediaPrewarm";
 import { applyDocumentMetadata } from "../lib/documentMetadata";
 import { isPlainMdPath } from "../lib/documentPaths";
 import { recordDocumentHistory } from "../lib/documentHistory";
@@ -93,6 +94,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (workspaceId) {
       await invoke("close_document", { workspaceId });
     }
+    cancelMediaPrewarm();
     clearAssetCache();
     const doc = await invoke<DocumentState>("create_document");
     set({
@@ -117,6 +119,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       await pullVaultBeforeAccess(vaultPath);
     }
 
+    cancelMediaPrewarm();
     clearAssetCache();
     const doc = await invoke<DocumentState>("open_document", { path });
     const recentFiles = await addRecentFile(path);
@@ -130,6 +133,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       saveStatus: "saved",
       recentFiles,
     });
+    const { ffmpegPath } = useSettingsStore.getState();
+    void prewarmDocumentMedia(doc.workspace_id, doc.content, ffmpegPath);
     return recentFiles;
   },
 
@@ -265,6 +270,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (workspaceId) {
       await invoke("close_document", { workspaceId });
     }
+    cancelMediaPrewarm();
     clearAssetCache();
     set({
       workspaceId: null,

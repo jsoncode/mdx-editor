@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 
 use uuid::Uuid;
 
+use crate::asset_store::store_asset_from_path;
 use crate::error::{AppError, AppResult};
-use crate::workspace::{extension_from_path, ASSET_DIR, INDEX_FILE};
+use crate::workspace::{ASSET_DIR, INDEX_FILE};
 
 /// Import local file references from markdown into `workspace/asset/` and rewrite links to `asset/...`.
 pub fn import_local_assets(
@@ -37,10 +38,13 @@ pub fn import_local_assets(
         }
 
         let canonical = fs::canonicalize(&resolved).unwrap_or(resolved);
-        let asset_relative = canonical_to_asset
-            .entry(canonical.clone())
-            .or_insert_with(|| copy_into_asset_dir(&asset_dir, &canonical))
-            .clone();
+        let asset_relative = if let Some(existing) = canonical_to_asset.get(&canonical) {
+            existing.clone()
+        } else {
+            let rel = copy_into_asset_dir(&asset_dir, &canonical)?;
+            canonical_to_asset.insert(canonical, rel.clone());
+            rel
+        };
 
         replacements.push((raw, asset_relative));
     }
@@ -48,12 +52,8 @@ pub fn import_local_assets(
     Ok(apply_reference_replacements(content, &replacements))
 }
 
-fn copy_into_asset_dir(asset_dir: &Path, source: &Path) -> String {
-    let ext = extension_from_path(source);
-    let filename = format!("{}.{}", &Uuid::new_v4().to_string()[..8], ext);
-    let dest = asset_dir.join(&filename);
-    let _ = fs::copy(source, &dest);
-    format!("{ASSET_DIR}/{filename}")
+fn copy_into_asset_dir(asset_dir: &Path, source: &Path) -> AppResult<String> {
+    store_asset_from_path(asset_dir, source)
 }
 
 fn resolve_local_path(base_dir: &Path, raw: &str) -> Option<PathBuf> {

@@ -4,7 +4,11 @@ import type { ExtraProps } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { buildRemarkPlugins } from "../lib/markdownPlugins";
 import { openAttachmentWithConfirm } from "../lib/attachment";
-import { resolveAssetUrl, resolveMediaPreviewUrl } from "../lib/assetResolver";
+import { resolveAssetUrl, resolveMediaPreviewUrl, peekMediaPreviewUrl, getMediaPreviewRevision, subscribeMediaPreviewRevision } from "../lib/assetResolver";
+import {
+  subscribeMediaPrewarmProgress,
+  type MediaPrewarmProgress,
+} from "../lib/mediaPrewarm";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
   audioMimeFallbacks,
@@ -13,6 +17,7 @@ import {
   isAttachmentPath,
   isAudioExtension,
   isVideoExtension,
+  needsMediaTranscode,
   normalizeAssetPath,
   videoMimeType,
 } from "../lib/media";
@@ -67,6 +72,11 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
   const [resolvedSrc, setResolvedSrc] = useState("");
   const [ready, setReady] = useState(false);
   const [transcoding, setTranscoding] = useState(false);
+  const [previewRevision, setPreviewRevision] = useState(getMediaPreviewRevision);
+
+  useEffect(() => subscribeMediaPreviewRevision(() => {
+    setPreviewRevision(getMediaPreviewRevision());
+  }), []);
 
   useEffect(() => {
     if (!src) {
@@ -77,20 +87,40 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
     }
 
     let cancelled = false;
-    setReady(false);
-    setTranscoding(true);
+    const normalized = normalizeAssetPath(src);
 
-    void resolveMediaPreviewUrl(workspaceId, src, ffmpegPath).then((url) => {
+    const applyUrl = (url: string, isTranscoding: boolean) => {
       if (cancelled) return;
       setResolvedSrc(url);
       setReady(true);
+      setTranscoding(isTranscoding);
+    };
+
+    const cached = peekMediaPreviewUrl(workspaceId, src, ffmpegPath);
+    if (cached) {
+      applyUrl(cached, false);
+      return;
+    }
+
+    if (!needsMediaTranscode(normalized)) {
+      setReady(false);
       setTranscoding(false);
+      void resolveAssetUrl(workspaceId, src).then((url) => applyUrl(url, false));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setReady(false);
+    setTranscoding(true);
+    void resolveMediaPreviewUrl(workspaceId, src, ffmpegPath).then((url) => {
+      applyUrl(url, false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [src, workspaceId, ffmpegPath]);
+  }, [src, workspaceId, ffmpegPath, previewRevision]);
 
   return { resolvedSrc, ready, transcoding };
 }
@@ -271,6 +301,9 @@ export function MarkdownPreview({
 }: MarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const markdownSingleLineBreaks = useSettingsStore((s) => s.markdownSingleLineBreaks);
+  const [prewarmProgress, setPrewarmProgress] = useState<MediaPrewarmProgress | null>(null);
+
+  useEffect(() => subscribeMediaPrewarmProgress(setPrewarmProgress), []);
 
   const remarkPlugins = useMemo(
     () => buildRemarkPlugins(markdownSingleLineBreaks),
@@ -318,6 +351,15 @@ export function MarkdownPreview({
 
   return (
     <div ref={containerRef} className="markdown-preview">
+      {prewarmProgress && prewarmProgress.done < prewarmProgress.total ? (
+        <p className="media-prewarm-banner" aria-live="polite">
+          正在后台转码媒体（{prewarmProgress.done}/{prewarmProgress.total}）
+          {prewarmProgress.current
+            ? `：${fileNameFromPath(prewarmProgress.current)}`
+            : ""}
+          …
+        </p>
+      ) : null}
       {isEmpty ? (
         <p className="markdown-preview-empty">请在左侧编辑区插入内容</p>
       ) : (

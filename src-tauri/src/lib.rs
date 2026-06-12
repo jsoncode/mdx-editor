@@ -1,4 +1,5 @@
 mod asset_refs;
+mod asset_store;
 mod clipboard;
 mod commands;
 mod error;
