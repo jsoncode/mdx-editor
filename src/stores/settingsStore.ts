@@ -3,10 +3,11 @@ import {
   clampHistoryDepth,
   DEFAULT_DOCUMENT_HISTORY_DEPTH,
   DEFAULT_EDITOR_HISTORY_DEPTH,
+  DEFAULT_GIT_SYNC,
   loadAppSettings,
   saveAppSettings,
 } from "../lib/settings";
-import type { AppSettings } from "../types/settings";
+import type { AppSettings, GitSyncSettings } from "../types/settings";
 
 interface SettingsStore extends AppSettings {
   loaded: boolean;
@@ -19,6 +20,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   documentHistoryDepth: DEFAULT_DOCUMENT_HISTORY_DEPTH,
   recordDeviceInfo: false,
   recordLocation: false,
+  gitSync: DEFAULT_GIT_SYNC,
   loaded: false,
 
   initialize: async () => {
@@ -32,8 +34,23 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       documentHistoryDepth: clampHistoryDepth(settings.documentHistoryDepth),
       recordDeviceInfo: settings.recordDeviceInfo,
       recordLocation: settings.recordLocation,
+      gitSync: {
+        ...DEFAULT_GIT_SYNC,
+        ...settings.gitSync,
+        branch: settings.gitSync.branch.trim() || DEFAULT_GIT_SYNC.branch,
+        remoteUrl: settings.gitSync.remoteUrl.trim(),
+        authorName: settings.gitSync.authorName.trim(),
+        authorEmail: settings.gitSync.authorEmail.trim(),
+        commitMessageTemplate:
+          settings.gitSync.commitMessageTemplate.trim() ||
+          DEFAULT_GIT_SYNC.commitMessageTemplate,
+      },
     };
     await saveAppSettings(next);
     set(next);
   },
 }));
+
+export function getGitSyncSettings(): GitSyncSettings {
+  return useSettingsStore.getState().gitSync;
+}

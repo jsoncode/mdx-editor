@@ -165,6 +165,7 @@ export function WelcomePage() {
             <li><kbd>Ctrl</kbd> + <kbd>N</kbd> 新建文档</li>
             <li><kbd>Ctrl</kbd> + <kbd>O</kbd> 打开文档</li>
             <li><kbd>Ctrl</kbd> + <kbd>S</kbd> 保存文档</li>
+            <li><kbd>Ctrl</kbd> + <kbd>W</kbd> 关闭文档 / 退出应用</li>
             <li><kbd>Ctrl</kbd> + <kbd>F</kbd> 查找与替换</li>
             <li><kbd>Ctrl</kbd> + <kbd>Z</kbd> / <kbd>Ctrl</kbd> + <kbd>Y</kbd> 撤销 / 重做</li>
             <li>拖拽 .md / .mdx 文件到窗口可直接打开</li>

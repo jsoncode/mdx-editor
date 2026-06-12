@@ -3,10 +3,13 @@ import { create } from "zustand";
 import { clearAssetCache } from "../lib/assetResolver";
 import { applyDocumentMetadata } from "../lib/documentMetadata";
 import { recordDocumentHistory } from "../lib/documentHistory";
+import { isPathInVault } from "../lib/gitSync";
+import { pullVaultBeforeAccess, pushVaultAfterSave } from "../lib/gitSyncWorkflow";
 import { addRecentFile } from "../lib/recentFiles";
 import type { DocumentState, Manifest, SaveStatus } from "../types/document";
 import type { RecentFileEntry } from "../types/recent";
 import { useSettingsStore } from "./settingsStore";
+import { useVaultStore } from "./vaultStore";
 
 interface DocumentStore {
   workspaceId: string | null;
@@ -34,6 +37,7 @@ interface DocumentStore {
   setFilePath: (filePath: string | null) => void;
   setManifest: (manifest: Manifest) => void;
   refreshManifest: () => Promise<void>;
+  closeDocument: () => Promise<void>;
 }
 
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
@@ -103,6 +107,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (workspaceId) {
       await invoke("close_document", { workspaceId });
     }
+
+    const vaultPath = useVaultStore.getState().vaultPath;
+    if (vaultPath && isPathInVault(path, vaultPath)) {
+      await pullVaultBeforeAccess(vaultPath);
+    }
+
     clearAssetCache();
     const doc = await invoke<DocumentState>("open_document", { path });
     const recentFiles = await addRecentFile(path);
@@ -142,6 +152,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       workspaceId,
       path: path ?? null,
     });
+
+    const finalPath = savedPath ?? get().filePath;
+    const vaultPath = useVaultStore.getState().vaultPath;
+    if (finalPath && vaultPath && isPathInVault(finalPath, vaultPath)) {
+      pushVaultAfterSave(vaultPath, finalPath);
+    }
 
     if (savedPath) {
       const recentFiles = await addRecentFile(savedPath);
@@ -192,5 +208,22 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!workspaceId) return;
     const manifest = await invoke<Manifest>("get_document_manifest", { workspaceId });
     set({ manifest });
+  },
+
+  closeDocument: async () => {
+    const { workspaceId } = get();
+    if (workspaceId) {
+      await invoke("close_document", { workspaceId });
+    }
+    clearAssetCache();
+    set({
+      workspaceId: null,
+      content: "",
+      savedContent: "",
+      manifest: null,
+      filePath: null,
+      isDirty: false,
+      saveStatus: "idle",
+    });
   },
 }));

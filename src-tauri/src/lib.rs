@@ -2,6 +2,7 @@ mod asset_refs;
 mod clipboard;
 mod commands;
 mod error;
+mod git_sync;
 mod launch;
 mod manifest;
 mod manifest_io;
@@ -23,6 +24,15 @@ fn take_launch_file(state: tauri::State<'_, LaunchState>) -> Option<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(job_path) = git_sync::try_parse_cli_job(&args) {
+        if let Err(error) = git_sync::run_job(&job_path) {
+            eprintln!("Git sync job failed: {error}");
+            std::process::exit(1);
+        }
+        std::process::exit(0);
+    }
+
     let mut builder = tauri::Builder::default();
 
     #[cfg(desktop)]
@@ -82,6 +92,10 @@ pub fn run() {
             commands::get_asset_absolute_path,
             commands::export_markdown,
             commands::export_html,
+            commands::git_sync_pull,
+            commands::git_sync_push,
+            commands::git_sync_test,
+            commands::git_sync_status,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

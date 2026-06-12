@@ -1614,7 +1614,8 @@ body.printing .markdown-preview {
 }
 
 .settings-dialog {
-  min-width: 420px;
+  min-width: 520px;
+  max-width: min(640px, calc(100vw - 2rem));
 }
 
 .settings-dialog-desc {
@@ -1653,6 +1654,21 @@ body.printing .markdown-preview {
   border-radius: 5px;
   font-size: 13px;
   max-width: 160px;
+}
+
+.settings-field input.settings-input-wide {
+  max-width: 100%;
+}
+
+.settings-git-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.settings-hint-warn {
+  color: #b45309;
 }
 
 .settings-section {

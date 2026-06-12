@@ -8,6 +8,8 @@ pub enum AppError {
     Zip(#[from] zip::result::ZipError),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Git error: {0}")]
+    Git(#[from] git2::Error),
     #[error("Workspace not found: {0}")]
     WorkspaceNotFound(String),
     #[error("Invalid MDX file: {0}")]

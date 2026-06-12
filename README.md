@@ -182,7 +182,7 @@ npm run tauri build
 | 类型 | 路径 |
 |------|------|
 | 可执行文件 | `src-tauri/target/release/mdx-editor.exe` |
-| NSIS 安装包 | `src-tauri/target/release/bundle/nsis/MDX 编辑器_0.1.3_x64-setup.exe` |
+| NSIS 安装包 | `src-tauri/target/release/bundle/nsis/MDX 编辑器_0.1.4_x64-setup.exe` |
 | MSI 安装包 | `src-tauri/target/release/bundle/msi/` |
 
 版本号以 `src-tauri/tauri.conf.json` 与 `package.json` 中的 `version` 为准。

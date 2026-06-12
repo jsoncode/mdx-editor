@@ -19,6 +19,7 @@ import { getRecentFileEntries } from "./lib/recentFiles";
 import { isInsertablePath, isMarkdownDocumentPath } from "./lib/media";
 import { MARKDOWN_DOCUMENT_SAVE_FILTERS, defaultSavePath, isPlainMdPath } from "./lib/documentPaths";
 import { promptPlainMdSaveChoice } from "./lib/savePrompt";
+import { isIdleSession } from "./lib/session";
 import { useDocumentStore } from "./stores/documentStore";
 import { useUiStore } from "./stores/uiStore";
 import { useVaultStore } from "./stores/vaultStore";
@@ -27,6 +28,7 @@ import "./App.css";
 
 function App() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [documentCloseDialogOpen, setDocumentCloseDialogOpen] = useState(false);
   const forceClosingRef = useRef(false);
   const isDirtyRef = useRef(false);
 
@@ -38,6 +40,7 @@ function App() {
   const saveDocument = useDocumentStore((s) => s.saveDocument);
   const setRecentFiles = useDocumentStore((s) => s.setRecentFiles);
   const resetDirty = useDocumentStore((s) => s.resetDirty);
+  const closeDocument = useDocumentStore((s) => s.closeDocument);
   const appView = useUiStore((s) => s.appView);
   const searchOpen = useUiStore((s) => s.searchOpen);
   const settingsOpen = useUiStore((s) => s.settingsOpen);
@@ -143,6 +146,50 @@ function App() {
     };
   }, [openExternalDocument]);
 
+  const forceDestroy = useCallback(async () => {
+    forceClosingRef.current = true;
+    isDirtyRef.current = false;
+    setCloseDialogOpen(false);
+    await getCurrentWindow().destroy();
+  }, []);
+
+  const returnToWelcomeAfterClose = useCallback(async () => {
+    await closeDocument();
+    setAppView("welcome");
+    setSearchOpen(false);
+    await getCurrentWindow().setTitle("MDX Editor");
+  }, [closeDocument, setAppView, setSearchOpen]);
+
+  const requestCloseApp = useCallback(async () => {
+    if (isDirtyRef.current) {
+      setCloseDialogOpen(true);
+      return;
+    }
+    await forceDestroy();
+  }, [forceDestroy]);
+
+  const requestCloseDocument = useCallback(() => {
+    if (closeDialogOpen || documentCloseDialogOpen || switchDialogOpen) return;
+
+    if (isIdleSession()) {
+      void requestCloseApp();
+      return;
+    }
+
+    if (isDirtyRef.current) {
+      setDocumentCloseDialogOpen(true);
+      return;
+    }
+
+    void returnToWelcomeAfterClose();
+  }, [
+    closeDialogOpen,
+    documentCloseDialogOpen,
+    switchDialogOpen,
+    requestCloseApp,
+    returnToWelcomeAfterClose,
+  ]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "n") {
@@ -160,6 +207,11 @@ function App() {
         void saveDocument();
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && event.key === "w") {
+        event.preventDefault();
+        requestCloseDocument();
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.key === "f") {
         event.preventDefault();
         useUiStore.getState().setSearchOpen(true);
@@ -175,14 +227,15 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [saveDocument, searchOpen, setSearchOpen, printDocument, handleNew, handleOpen]);
-
-  const forceDestroy = useCallback(async () => {
-    forceClosingRef.current = true;
-    isDirtyRef.current = false;
-    setCloseDialogOpen(false);
-    await getCurrentWindow().destroy();
-  }, []);
+  }, [
+    saveDocument,
+    searchOpen,
+    setSearchOpen,
+    printDocument,
+    handleNew,
+    handleOpen,
+    requestCloseDocument,
+  ]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -242,6 +295,47 @@ function App() {
     await forceDestroy();
   };
 
+  const handleDocumentCloseSave = async () => {
+    try {
+      if (!filePath) {
+        const selected = await save({
+          title: "保存文档",
+          filters: [...MARKDOWN_DOCUMENT_SAVE_FILTERS],
+          defaultPath: defaultSavePath(null, "mdx"),
+        });
+        if (typeof selected !== "string") return;
+        await saveDocument(selected);
+      } else if (isPlainMdPath(filePath)) {
+        const choice = await promptPlainMdSaveChoice();
+        if (choice === "mdx") {
+          const selected = await save({
+            title: "另存为 MDX",
+            filters: [{ name: "MDX 文档", extensions: ["mdx"] }],
+            defaultPath: defaultSavePath(filePath, "mdx"),
+          });
+          if (typeof selected !== "string") return;
+          await saveDocument(selected);
+        } else {
+          await saveDocument();
+        }
+      } else {
+        await saveDocument();
+      }
+      resetDirty();
+      isDirtyRef.current = false;
+      setDocumentCloseDialogOpen(false);
+      await returnToWelcomeAfterClose();
+    } catch (error) {
+      console.error("保存失败:", error);
+    }
+  };
+
+  const handleDocumentCloseDiscard = async () => {
+    isDirtyRef.current = false;
+    setDocumentCloseDialogOpen(false);
+    await returnToWelcomeAfterClose();
+  };
+
   return (
     <div className="app">
       <Ribbon previewHtml={previewHtml} onPrint={printDocument} />
@@ -256,6 +350,15 @@ function App() {
         onSave={() => void handleCloseSave()}
         onDiscard={() => void handleCloseDiscard()}
         onCancel={() => setCloseDialogOpen(false)}
+      />
+
+      <UnsavedDialog
+        open={documentCloseDialogOpen}
+        title="关闭文档"
+        message="文档有未保存的更改，是否在关闭前保存？"
+        onSave={() => void handleDocumentCloseSave()}
+        onDiscard={() => void handleDocumentCloseDiscard()}
+        onCancel={() => setDocumentCloseDialogOpen(false)}
       />
 
       <UnsavedDialog

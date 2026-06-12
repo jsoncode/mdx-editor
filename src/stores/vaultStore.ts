@@ -13,6 +13,7 @@ import {
   scanVaultTree,
   suggestVaultDocumentName,
 } from "../lib/vault";
+import { pullVaultBeforeAccess } from "../lib/gitSyncWorkflow";
 import type { VaultTreeNode } from "../types/vault";
 
 interface VaultStore {
@@ -93,6 +94,7 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
   openVault: async (path) => {
     set({ loading: true, vaultPath: path });
     try {
+      await pullVaultBeforeAccess(path);
       const tree = await scanVaultTree(path);
       await saveVaultPath(path);
       await addRecentVault(path);
