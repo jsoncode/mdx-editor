@@ -108,6 +108,7 @@ pub fn run() {
             commands::get_document_versions,
             commands::append_document_version,
             commands::clear_document_versions,
+            commands::delete_document_version,
             commands::scan_vault_tree,
             commands::create_vault_folder_cmd,
             commands::create_vault_document_cmd,

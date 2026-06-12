@@ -74,6 +74,7 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
   };
 
   const openEditor = () => setAppView("editor");
+  const isEditorView = appView === "editor";
 
   const triggerSave = () => {
     diag("shortcut", "save_button_click");
@@ -91,25 +92,32 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
           <RibbonMenu label="文件">
             <RibbonMenuItem label="新建" icon={<IconNew />} onClick={() => void actions.handleNew()} />
             <RibbonMenuItem label="打开" icon={<IconOpen />} onClick={() => void actions.handleOpen()} />
-            <RibbonMenuItem label="保存" icon={<IconSave />} onClick={triggerSave} />
-            <RibbonMenuItem label="另存为" icon={<IconSave />} onClick={() => void actions.handleSaveAs()} />
+            {isEditorView && (
+              <>
+                <RibbonMenuItem label="保存" icon={<IconSave />} onClick={triggerSave} />
+                <RibbonMenuItem label="另存为" icon={<IconSave />} onClick={() => void actions.handleSaveAs()} />
+              </>
+            )}
             <div className="ribbon-menu-divider" role="separator" />
             <RibbonMenuItem label="最近文档" icon={<IconRecent />} onClick={openRecentPage} />
-            {!isPlainMdDocument && (
+            {isEditorView && !isPlainMdDocument && (
               <RibbonMenuItem
                 label="文件属性"
                 icon={<IconRecent />}
                 onClick={() => {
-                  openEditor();
                   setPropertiesOpen(true);
                 }}
               />
             )}
-            <div className="ribbon-menu-divider" role="separator" />
-            <RibbonMenuItem label="导出 Markdown" icon={<IconExport />} onClick={() => void actions.handleExportMarkdown()} />
-            <RibbonMenuItem label="导出 HTML" icon={<IconExport />} onClick={() => void actions.handleExportHtml()} />
-            <div className="ribbon-menu-divider" role="separator" />
-            <RibbonMenuItem label="打印" icon={<IconPrint />} onClick={onPrint} />
+            {isEditorView && (
+              <>
+                <div className="ribbon-menu-divider" role="separator" />
+                <RibbonMenuItem label="导出 Markdown" icon={<IconExport />} onClick={() => void actions.handleExportMarkdown()} />
+                <RibbonMenuItem label="导出 HTML" icon={<IconExport />} onClick={() => void actions.handleExportHtml()} />
+                <div className="ribbon-menu-divider" role="separator" />
+                <RibbonMenuItem label="打印" icon={<IconPrint />} onClick={onPrint} />
+              </>
+            )}
           </RibbonMenu>
 
           <RibbonMenu label="工作区">
@@ -135,21 +143,22 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
             )}
           </RibbonMenu>
 
-          <RibbonMenu label="插入">
-            <RibbonMenuItem label="图片" icon={<IconImage />} onClick={() => void actions.handleInsertImage()} />
-            <RibbonMenuItem label="音视频" icon={<IconMedia />} onClick={() => void actions.handleInsertMedia()} />
-          </RibbonMenu>
+          {isEditorView && (
+            <RibbonMenu label="插入">
+              <RibbonMenuItem label="图片" icon={<IconImage />} onClick={() => void actions.handleInsertImage()} />
+              <RibbonMenuItem label="音视频" icon={<IconMedia />} onClick={() => void actions.handleInsertMedia()} />
+            </RibbonMenu>
+          )}
 
           <RibbonMenu label="视图">
             <RibbonMenuItem label="开始页" icon={<IconRecent />} onClick={openWelcomePage} />
-            <RibbonMenuItem
-              label={searchOpen ? "关闭查找" : "查找"}
-              icon={<IconSearch />}
-              onClick={() => {
-                openEditor();
-                setSearchOpen(!searchOpen);
-              }}
-            />
+            {isEditorView && (
+              <RibbonMenuItem
+                label={searchOpen ? "关闭查找" : "查找"}
+                icon={<IconSearch />}
+                onClick={() => setSearchOpen(!searchOpen)}
+              />
+            )}
             <RibbonMenuItem label="最近文档" icon={<IconRecent />} onClick={openRecentPage} />
           </RibbonMenu>
 
@@ -165,34 +174,39 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
           </RibbonMenu>
         </nav>
 
-        <div className="ribbon-quick-actions" aria-label="快捷操作">
-          <RibbonQuickButton
-            label="保存"
-            icon={<IconSave />}
-            title="保存 (Ctrl+S)"
-            onClick={triggerSave}
-          />
-          {!isPlainMdDocument && (
+        {isEditorView && (
+          <div className="ribbon-quick-actions" aria-label="快捷操作">
             <RibbonQuickButton
-              label="历史修改"
-              icon={<IconHistory />}
-              title="查看历史修改"
-              active={appView === "history"}
-              onClick={openHistoryPage}
+              label="保存"
+              icon={<IconSave />}
+              title="保存 (Ctrl+S)"
+              onClick={triggerSave}
             />
-          )}
-        </div>
+            {!isPlainMdDocument && (
+              <RibbonQuickButton
+                label="历史修改"
+                icon={<IconHistory />}
+                title="查看历史修改"
+                onClick={openHistoryPage}
+              />
+            )}
+          </div>
+        )}
 
-        <LayoutToggle
-          mode={layoutMode}
-          onChange={(mode) => {
-            setLayoutMode(mode);
-          }}
-        />
+        {isEditorView && (
+          <LayoutToggle
+            mode={layoutMode}
+            onChange={(mode) => {
+              setLayoutMode(mode);
+            }}
+          />
+        )}
 
         <div className="ribbon-status">
           {filePath && <span className="file-path">{filePath}</span>}
-          <span className={`save-status status-${saveStatus}`}>{statusText}</span>
+          {isEditorView && (
+            <span className={`save-status status-${saveStatus}`}>{statusText}</span>
+          )}
         </div>
       </div>
     </header>

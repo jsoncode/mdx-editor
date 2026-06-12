@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { isPlainMdPath } from "../lib/documentPaths";
-import { clearDocumentHistory, getDocumentHistory } from "../lib/documentHistory";
+import {
+  clearDocumentHistory,
+  countHistoryDeletes,
+  deleteDocumentHistoryEntry,
+  getDocumentHistory,
+} from "../lib/documentHistory";
 import { getFileName } from "../lib/recentFiles";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
@@ -29,6 +34,7 @@ export function DocumentHistoryPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadHistory = async () => {
     if (!workspaceId) {
@@ -50,6 +56,39 @@ export function DocumentHistoryPage() {
   useEffect(() => {
     void loadHistory();
   }, [workspaceId]);
+
+  const handleDelete = async (entry: DocumentHistoryEntry) => {
+    if (!workspaceId) return;
+
+    const removeCount = countHistoryDeletes(entries, entry.id);
+    const messageText =
+      removeCount > 1
+        ? `确定删除 ${formatSavedTime(entry.savedAt)} 的记录？\n将同时移除 ${removeCount} 条更早的历史（从旧到新依次清理，避免 diff 链断裂）。删除后需保存文档才会写入文件。`
+        : `确定删除 ${formatSavedTime(entry.savedAt)} 的记录？删除后需保存文档才会写入文件。`;
+
+    const confirmed = await ask(messageText, {
+      title: "删除历史记录",
+      kind: "warning",
+      okLabel: "删除",
+      cancelLabel: "取消",
+    });
+    if (!confirmed) return;
+
+    setDeletingId(entry.id);
+    try {
+      const removed = await deleteDocumentHistoryEntry(workspaceId, entry.id);
+      if (removed === 0) return;
+
+      if (filePath) {
+        await saveDocument();
+      }
+      await loadHistory();
+    } catch (error) {
+      await message(String(error), { title: "删除失败", kind: "error" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleClear = async () => {
     if (!workspaceId || entries.length === 0) return;
@@ -128,18 +167,32 @@ export function DocumentHistoryPage() {
           <div className="history-layout history-layout-page">
             <aside className="history-list">
               {entries.map((entry) => (
-                <button
+                <div
                   key={entry.id}
-                  type="button"
-                  className={`history-list-item${entry.id === selectedId ? " active" : ""}`}
-                  onClick={() => setSelectedId(entry.id)}
+                  className={`history-list-row${entry.id === selectedId ? " active" : ""}`}
                 >
-                  <span className="history-list-time">{formatSavedTime(entry.savedAt)}</span>
-                  <span className="history-list-stats">
-                    <span className="history-stat-add">+{entry.stats.additions}</span>
-                    <span className="history-stat-remove">−{entry.stats.deletions}</span>
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    className="history-list-item"
+                    onClick={() => setSelectedId(entry.id)}
+                  >
+                    <span className="history-list-time">{formatSavedTime(entry.savedAt)}</span>
+                    <span className="history-list-stats">
+                      <span className="history-stat-add">+{entry.stats.additions}</span>
+                      <span className="history-stat-remove">−{entry.stats.deletions}</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="history-list-delete"
+                    title="删除此记录"
+                    aria-label={`删除 ${formatSavedTime(entry.savedAt)} 的历史记录`}
+                    disabled={deletingId === entry.id}
+                    onClick={() => void handleDelete(entry)}
+                  >
+                    {deletingId === entry.id ? "…" : "×"}
+                  </button>
+                </div>
               ))}
             </aside>
 

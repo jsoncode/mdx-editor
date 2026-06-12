@@ -41,3 +41,23 @@ export async function recordDocumentHistory(
 export async function clearDocumentHistory(workspaceId: string): Promise<void> {
   await invoke("clear_document_versions", { workspaceId });
 }
+
+/** 删除单条历史；若删除非最旧记录，会一并移除所有更早记录 */
+export async function deleteDocumentHistoryEntry(
+  workspaceId: string,
+  entryId: string,
+): Promise<number> {
+  const [, removed] = await invoke<[DocumentVersionsFile, number]>("delete_document_version", {
+    workspaceId,
+    entryId,
+  });
+  return removed;
+}
+
+/** 预估删除某条记录时会移除的条数（与后端 delete_version 规则一致） */
+export function countHistoryDeletes(entries: DocumentHistoryEntry[], entryId: string): number {
+  const index = entries.findIndex((entry) => entry.id === entryId);
+  if (index < 0) return 0;
+  if (index === 0 || index + 1 === entries.length) return 1;
+  return entries.length - index;
+}

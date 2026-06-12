@@ -7,7 +7,13 @@ import { search } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { runRedo, runUndo } from "../lib/editorHistory";
-import { editorHighlight, editorTheme, selectionTextPlugin } from "../lib/editorTheme";
+import { editorPlaceholder } from "../lib/editorPlaceholder";
+import {
+  editorHighlight,
+  editorTheme,
+  selectedTextField,
+  selectionFocusPlugin,
+} from "../lib/editorTheme";
 import { applyMarkdownFormat, type MarkdownFormatAction } from "../lib/markdownFormat";
 import { useDocumentStore } from "../stores/documentStore";
 import { useEditorStore } from "../stores/editorStore";
@@ -136,7 +142,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           base: markdownLanguage,
           codeLanguages: languages,
         }),
-        selectionTextPlugin,
+        selectedTextField,
+        selectionFocusPlugin,
+        editorPlaceholder,
         EditorView.lineWrapping,
         editorTheme,
       ],
@@ -158,8 +166,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           onChange={handleChange}
           onCreateEditor={onCreateEditor}
           basicSetup={{
-            lineNumbers: true,
-            foldGutter: true,
+            lineNumbers: false,
+            foldGutter: false,
             highlightActiveLine: true,
             searchKeymap: false,
             history: false,

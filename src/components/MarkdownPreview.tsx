@@ -164,11 +164,18 @@ export function MarkdownPreview({
     [markdownSingleLineBreaks],
   );
 
+  const isEmpty = content.trim().length === 0;
+
   useEffect(() => {
-    if (containerRef.current && onHtmlChange) {
+    if (!onHtmlChange) return;
+    if (isEmpty) {
+      onHtmlChange("");
+      return;
+    }
+    if (containerRef.current) {
       onHtmlChange(containerRef.current.innerHTML);
     }
-  }, [content, workspaceId, markdownSingleLineBreaks, onHtmlChange]);
+  }, [content, isEmpty, workspaceId, markdownSingleLineBreaks, onHtmlChange]);
 
   const components = useMemo(
     () => ({
@@ -198,13 +205,17 @@ export function MarkdownPreview({
 
   return (
     <div ref={containerRef} className="markdown-preview">
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        rehypePlugins={[rehypeRaw]}
-        components={components}
-      >
-        {content}
-      </ReactMarkdown>
+      {isEmpty ? (
+        <p className="markdown-preview-empty">请在左侧编辑区插入内容</p>
+      ) : (
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={[rehypeRaw]}
+          components={components}
+        >
+          {content}
+        </ReactMarkdown>
+      )}
     </div>
   );
 }

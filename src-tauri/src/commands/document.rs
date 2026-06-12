@@ -349,3 +349,12 @@ pub fn clear_document_versions(
 ) -> Result<DocumentVersionsFile, AppError> {
     workspaces.clear_versions(&workspace_id)
 }
+
+#[tauri::command]
+pub fn delete_document_version(
+    workspaces: State<'_, WorkspaceManager>,
+    workspace_id: String,
+    entry_id: String,
+) -> Result<(DocumentVersionsFile, usize), AppError> {
+    workspaces.delete_version(&workspace_id, &entry_id)
+}

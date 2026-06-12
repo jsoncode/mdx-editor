@@ -130,44 +130,67 @@ export function useDocumentActions(previewHtml: string) {
     }
   };
 
-  const handleInsertImage = async () => {
+  const insertAssetFromDialog = async (
+    title: string,
+    filters: { name: string; extensions: string[] }[],
+  ) => {
+    if (!workspaceId) {
+      await message("请先新建或打开文档后再插入资源。", { title: "无法插入", kind: "warning" });
+      return;
+    }
+
     const selected = await open({
       multiple: false,
-      title: "插入图片",
-      filters: [
-        {
-          name: "图片",
-          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
-        },
-      ],
+      title,
+      filters,
     });
-    if (typeof selected === "string" && workspaceId) {
+    if (typeof selected !== "string") return;
+
+    try {
       const snippet = await invoke<string>("insert_asset_from_path", {
         workspaceId,
         sourcePath: selected,
       });
       insertText(`\n${snippet}\n`);
+    } catch (error) {
+      await message(String(error), { title: "插入失败", kind: "error" });
     }
   };
 
+  const handleInsertImage = async () => {
+    await insertAssetFromDialog("插入图片", [
+      {
+        name: "图片",
+        extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff"],
+      },
+    ]);
+  };
+
+  const handleInsertVideo = async () => {
+    await insertAssetFromDialog("插入视频", [
+      {
+        name: "视频",
+        extensions: ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "flv"],
+      },
+    ]);
+  };
+
+  const handleInsertAudio = async () => {
+    await insertAssetFromDialog("插入音频", [
+      {
+        name: "音频",
+        extensions: ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"],
+      },
+    ]);
+  };
+
   const handleInsertMedia = async () => {
-    const selected = await open({
-      multiple: false,
-      title: "插入媒体",
-      filters: [
-        {
-          name: "音视频",
-          extensions: ["mp4", "webm", "mov", "mp3", "wav", "ogg", "flac", "aac", "m4a"],
-        },
-      ],
-    });
-    if (typeof selected === "string" && workspaceId) {
-      const snippet = await invoke<string>("insert_asset_from_path", {
-        workspaceId,
-        sourcePath: selected,
-      });
-      insertText(`\n${snippet}\n`);
-    }
+    await insertAssetFromDialog("插入音视频", [
+      {
+        name: "音视频",
+        extensions: ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "flv", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"],
+      },
+    ]);
   };
 
   const handleExportMarkdown = async () => {
@@ -217,6 +240,8 @@ export function useDocumentActions(previewHtml: string) {
     handleSave,
     handleSaveAs,
     handleInsertImage,
+    handleInsertAudio,
+    handleInsertVideo,
     handleInsertMedia,
     handleExportMarkdown,
     handleExportHtml,

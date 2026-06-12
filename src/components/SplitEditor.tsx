@@ -28,14 +28,15 @@ function EditorPane({
   previewHtml: string;
   onCreateEditor: (view: EditorView | null) => void;
 }) {
-  const { handleInsertImage, handleInsertMedia } = useDocumentActions(previewHtml);
+  const { handleInsertImage, handleInsertAudio, handleInsertVideo } = useDocumentActions(previewHtml);
 
   return (
     <div className="editor-pane">
       <EditorToolbar
         editorRef={editorRef}
         onInsertImage={() => void handleInsertImage()}
-        onInsertMedia={() => void handleInsertMedia()}
+        onInsertAudio={() => void handleInsertAudio()}
+        onInsertVideo={() => void handleInsertVideo()}
       />
       <MarkdownEditor
         ref={editorRef}
@@ -75,14 +76,14 @@ export function SplitEditor() {
     useUiStore.getState().setAppView("editor");
   };
 
-  const insertAtCursor = (text: string) => {
+  const insertAtCursor = useCallback((text: string) => {
     editorRef.current?.insertAtCursor(text);
-  };
+  }, []);
 
   useEffect(() => {
-    setInsertAtCursor(() => insertAtCursor);
+    setInsertAtCursor(insertAtCursor);
     return () => setInsertAtCursor(null);
-  }, [setInsertAtCursor]);
+  }, [setInsertAtCursor, insertAtCursor]);
 
   const { handleDrop, handlePaste } = useAssetInsert(insertAtCursor, openMdxFile);
 

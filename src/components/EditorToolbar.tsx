@@ -17,7 +17,8 @@ interface ToolbarItem {
 interface EditorToolbarProps {
   editorRef: RefObject<MarkdownEditorHandle | null>;
   onInsertImage?: () => void;
-  onInsertMedia?: () => void;
+  onInsertAudio?: () => void;
+  onInsertVideo?: () => void;
 }
 
 function ToolbarButton({
@@ -54,7 +55,8 @@ function ToolbarDivider() {
 export function EditorToolbar({
   editorRef,
   onInsertImage,
-  onInsertMedia,
+  onInsertAudio,
+  onInsertVideo,
 }: EditorToolbarProps) {
   const view = useEditorStore((s) => s.view);
   const canUndo = useEditorStore((s) => s.canUndo);
@@ -182,15 +184,27 @@ export function EditorToolbar({
       onClick: onInsertImage,
     },
     {
-      label: "音视频",
-      title: "插入音视频文件",
+      label: "音频",
+      title: "插入音频文件",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 18V6l10-2v14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M6 15a3 3 0 1 0 0-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M19 16a2 2 0 1 0 0-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      ),
+      onClick: onInsertAudio,
+    },
+    {
+      label: "视频",
+      title: "插入视频文件",
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
           <path d="M10 9l6 4-6 4V9z" fill="currentColor" />
         </svg>
       ),
-      onClick: onInsertMedia,
+      onClick: onInsertVideo,
     },
     "divider",
     {

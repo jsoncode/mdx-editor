@@ -222,6 +222,15 @@ impl WorkspaceManager {
         let info = self.get(workspace_id)?;
         versions::clear_versions(&info.path)
     }
+
+    pub fn delete_version(
+        &self,
+        workspace_id: &str,
+        entry_id: &str,
+    ) -> AppResult<(DocumentVersionsFile, usize)> {
+        let info = self.get(workspace_id)?;
+        versions::delete_version(&info.path, entry_id)
+    }
 }
 
 pub fn extension_from_path(path: &Path) -> String {
