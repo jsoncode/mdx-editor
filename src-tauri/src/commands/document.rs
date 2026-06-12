@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
@@ -8,8 +8,8 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::manifest::{DocumentMetadataInput, Manifest};
 use crate::mdx::{pack_workspace, unpack_to_workspace};
-use crate::versions::{self, DocumentHistoryEntry, DocumentVersionsFile};
-use crate::workspace::{ASSET_DIR, INDEX_FILE, WorkspaceManager};
+use crate::versions::{DocumentHistoryEntry, DocumentVersionsFile};
+use crate::workspace::{INDEX_FILE, WorkspaceManager};
 
 fn extension_lower(path: &std::path::Path) -> Option<String> {
     path.extension()
@@ -33,12 +33,9 @@ fn open_plain_markdown_workspace(
     let id = Uuid::new_v4().to_string();
     let workspace_path = WorkspaceManager::workspaces_root(app)?.join(&id);
     fs::create_dir_all(&workspace_path)?;
-    fs::create_dir_all(workspace_path.join(ASSET_DIR))?;
 
     let content = fs::read_to_string(file_path)?;
     fs::write(workspace_path.join(INDEX_FILE), &content)?;
-    crate::manifest_io::import_manifest_sidecar(file_path, &workspace_path)?;
-    versions::import_versions_sidecar(file_path, &workspace_path)?;
 
     Ok(workspaces.register_workspace(
         id,
@@ -113,8 +110,38 @@ pub fn update_document_content(
     workspace_id: String,
     content: String,
 ) -> Result<(), AppError> {
+    crate::diagnostics::log(
+        "rust",
+        "info",
+        "update_document_content",
+        &format!("workspace_id={workspace_id} content_len={}", content.len()),
+    );
     workspaces.write_index(&workspace_id, &content)?;
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SaveDocumentResult {
+    pub path: String,
+    pub content: String,
+}
+
+fn import_base_dir(info: &crate::workspace::WorkspaceInfo, output_path: &Path) -> PathBuf {
+    if let Some(file_path) = info.file_path.as_ref() {
+        if is_plain_md_path(file_path) {
+            return file_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| output_path.parent().unwrap_or(Path::new(".")).to_path_buf());
+        }
+        if let Some(parent) = file_path.parent() {
+            return parent.to_path_buf();
+        }
+    }
+    output_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 #[tauri::command]
@@ -123,7 +150,7 @@ pub fn save_document(
     workspaces: State<'_, WorkspaceManager>,
     workspace_id: String,
     path: Option<String>,
-) -> Result<String, AppError> {
+) -> Result<SaveDocumentResult, AppError> {
     let info = workspaces.get(&workspace_id)?;
     let output_path = match path {
         Some(p) => PathBuf::from(p),
@@ -133,18 +160,37 @@ pub fn save_document(
             .ok_or_else(|| AppError::Other("No file path specified".to_string()))?,
     };
 
-    workspaces.cleanup_unused_assets(&workspace_id)?;
+    crate::diagnostics::log(
+        "rust",
+        "info",
+        "save_document_start",
+        &format!(
+            "workspace_id={workspace_id} output={}",
+            output_path.display()
+        ),
+    );
 
     if is_plain_md_path(&output_path) {
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent)?;
         }
         let content = workspaces.read_index(&workspace_id)?;
-        fs::write(&output_path, content)?;
-        versions::export_versions_sidecar(&output_path, &info.path)?;
-        crate::manifest_io::export_manifest_sidecar(&output_path, &info.path)?;
+        fs::write(&output_path, &content)?;
         workspaces.set_file_path(&workspace_id, Some(output_path.clone()))?;
-        return Ok(output_path.to_string_lossy().to_string());
+        crate::diagnostics::log(
+            "rust",
+            "info",
+            "save_document_ok",
+            &format!(
+                "workspace_id={workspace_id} path={} content_len={}",
+                output_path.display(),
+                content.len()
+            ),
+        );
+        return Ok(SaveDocumentResult {
+            path: output_path.to_string_lossy().to_string(),
+            content,
+        });
     }
 
     if !is_mdx_path(&output_path) {
@@ -153,12 +199,51 @@ pub fn save_document(
         ));
     }
 
+    let base_dir = import_base_dir(&info, &output_path);
+    let content = workspaces.read_index(&workspace_id)?;
+    let content = crate::md_import::import_local_assets(&info.path, &base_dir, &content)?;
+    workspaces.write_index(&workspace_id, &content)?;
+
+    workspaces.cleanup_unused_assets(&workspace_id)?;
+
     let mut manifest = workspaces.read_manifest(&workspace_id)?;
     pack_workspace(&info.path, &output_path, &mut manifest)?;
     workspaces.write_manifest(&workspace_id, &manifest)?;
     workspaces.set_file_path(&workspace_id, Some(output_path.clone()))?;
 
-    Ok(output_path.to_string_lossy().to_string())
+    crate::diagnostics::log(
+        "rust",
+        "info",
+        "save_document_ok",
+        &format!(
+            "workspace_id={workspace_id} path={} content_len={}",
+            output_path.display(),
+            content.len()
+        ),
+    );
+
+    Ok(SaveDocumentResult {
+        path: output_path.to_string_lossy().to_string(),
+        content,
+    })
+}
+
+#[tauri::command]
+pub fn convert_md_file_to_mdx(md_path: String, output_path: Option<String>) -> Result<String, AppError> {
+    let md = PathBuf::from(&md_path);
+    let output = match output_path {
+        Some(p) => PathBuf::from(p),
+        None => md.with_extension("mdx"),
+    };
+
+    if !is_plain_md_path(&md) {
+        return Err(AppError::Other("仅支持转换 .md 文件".to_string()));
+    }
+    if !is_mdx_path(&output) {
+        return Err(AppError::Other("输出路径必须使用 .mdx 扩展名".to_string()));
+    }
+
+    crate::md_import::convert_md_file_to_mdx(&md, &output)
 }
 
 #[tauri::command]
@@ -196,6 +281,12 @@ pub fn close_document(
     workspaces: State<'_, WorkspaceManager>,
     workspace_id: String,
 ) -> Result<(), AppError> {
+    crate::diagnostics::log(
+        "rust",
+        "warn",
+        "close_document",
+        &format!("workspace_id={workspace_id}"),
+    );
     workspaces.remove(&workspace_id)
 }
 

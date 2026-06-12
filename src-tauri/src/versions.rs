@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 
 pub const VERSIONS_FILE: &str = "versions.json";
 const FORMAT_VERSION: &str = "1";
@@ -52,10 +52,6 @@ pub fn versions_file_path(workspace_path: &Path) -> PathBuf {
     workspace_path.join(VERSIONS_FILE)
 }
 
-pub fn versions_sidecar_path(document_path: &Path) -> PathBuf {
-    PathBuf::from(format!("{}.versions.json", document_path.to_string_lossy()))
-}
-
 pub fn read_versions(workspace_path: &Path) -> AppResult<DocumentVersionsFile> {
     let path = versions_file_path(workspace_path);
     if !path.exists() {
@@ -98,37 +94,4 @@ pub fn clear_versions(workspace_path: &Path) -> AppResult<DocumentVersionsFile> 
     let file = DocumentVersionsFile::default();
     write_versions(workspace_path, &file)?;
     Ok(file)
-}
-
-pub fn import_versions_sidecar(document_path: &Path, workspace_path: &Path) -> AppResult<()> {
-    let sidecar = versions_sidecar_path(document_path);
-    let target = versions_file_path(workspace_path);
-    if sidecar.exists() {
-        fs::copy(&sidecar, &target).map_err(|e| AppError::Io(e))?;
-        return Ok(());
-    }
-    ensure_versions_file(workspace_path)
-}
-
-pub fn export_versions_sidecar(document_path: &Path, workspace_path: &Path) -> AppResult<()> {
-    let source = versions_file_path(workspace_path);
-    if !source.exists() {
-        return Ok(());
-    }
-
-    let file = read_versions(workspace_path)?;
-    if file.entries.is_empty() {
-        let sidecar = versions_sidecar_path(document_path);
-        if sidecar.exists() {
-            fs::remove_file(sidecar)?;
-        }
-        return Ok(());
-    }
-
-    let sidecar = versions_sidecar_path(document_path);
-    if let Some(parent) = sidecar.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(sidecar, serde_json::to_string_pretty(&file)?)?;
-    Ok(())
 }

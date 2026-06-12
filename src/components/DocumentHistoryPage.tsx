@@ -1,17 +1,11 @@
 import { useEffect, useState } from "react";
 import { ask, message } from "@tauri-apps/plugin-dialog";
-import { clearDocumentHistory, getDocumentHistory } from "../lib/documentHistory";
 import { isPlainMdPath } from "../lib/documentPaths";
+import { clearDocumentHistory, getDocumentHistory } from "../lib/documentHistory";
 import { getFileName } from "../lib/recentFiles";
+import { useDocumentStore } from "../stores/documentStore";
+import { useUiStore } from "../stores/uiStore";
 import type { DocumentHistoryEntry } from "../types/documentHistory";
-
-interface DocumentHistoryDialogProps {
-  open: boolean;
-  workspaceId: string | null;
-  filePath: string | null;
-  onClose: () => void;
-  onPersistHistory?: () => Promise<void>;
-}
 
 function formatSavedTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString("zh-CN", {
@@ -24,13 +18,13 @@ function formatSavedTime(timestamp: number): string {
   });
 }
 
-export function DocumentHistoryDialog({
-  open,
-  workspaceId,
-  filePath,
-  onClose,
-  onPersistHistory,
-}: DocumentHistoryDialogProps) {
+export function DocumentHistoryPage() {
+  const workspaceId = useDocumentStore((s) => s.workspaceId);
+  const filePath = useDocumentStore((s) => s.filePath);
+  const saveDocument = useDocumentStore((s) => s.saveDocument);
+  const enterEditor = useUiStore((s) => s.enterEditor);
+  const showWelcome = useUiStore((s) => s.showWelcome);
+
   const [entries, setEntries] = useState<DocumentHistoryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,9 +48,8 @@ export function DocumentHistoryDialog({
   };
 
   useEffect(() => {
-    if (!open) return;
     void loadHistory();
-  }, [open, workspaceId]);
+  }, [workspaceId]);
 
   const handleClear = async () => {
     if (!workspaceId || entries.length === 0) return;
@@ -72,8 +65,8 @@ export function DocumentHistoryDialog({
     setClearing(true);
     try {
       await clearDocumentHistory(workspaceId);
-      if (filePath && onPersistHistory) {
-        await onPersistHistory();
+      if (filePath) {
+        await saveDocument();
       }
       setEntries([]);
       setSelectedId(null);
@@ -84,49 +77,45 @@ export function DocumentHistoryDialog({
     }
   };
 
-  if (!open) return null;
-
   const selected = entries.find((entry) => entry.id === selectedId) ?? null;
   const storageHint = filePath
     ? isPlainMdPath(filePath)
-      ? "历史记录保存在同目录的 .versions.json sidecar 文件中，随 .md 一起分享。"
+      ? "纯 Markdown (.md) 文档不记录历史修改；请另存为 MDX 以启用此功能。"
       : "历史记录保存在 MDX 文档内的 versions.json 中，分享文档后仍可查看。"
-    : "保存文档后，历史记录会写入文档（MDX 内置或 .md sidecar 文件）。";
+    : "保存 MDX 文档后，历史记录会写入文档内的 versions.json。";
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div
-        className="dialog history-dialog"
-        role="dialog"
-        aria-labelledby="history-dialog-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="history-dialog-header">
-          <div>
-            <h3 id="history-dialog-title">历史修改</h3>
-            <p className="history-dialog-desc">
-              {filePath
-                ? `${getFileName(filePath)} · 仅记录 Markdown 正文变更，不含 asset 资源。${storageHint}`
-                : "请先保存文档后再查看历史修改。"}
-            </p>
-          </div>
-          <div className="history-dialog-header-actions">
-            {entries.length > 0 && workspaceId && (
-              <button
-                type="button"
-                className="danger history-clear-btn"
-                disabled={clearing}
-                onClick={() => void handleClear()}
-              >
-                {clearing ? "清空中…" : "清空历史"}
-              </button>
-            )}
-            <button type="button" className="secondary history-close-btn" onClick={onClose}>
-              关闭
-            </button>
-          </div>
+    <div className="history-page">
+      <div className="history-page-header">
+        <div>
+          <h1>历史修改</h1>
+          <p>
+            {filePath
+              ? `${getFileName(filePath)} · 仅记录 Markdown 正文变更，不含 asset 资源。${storageHint}`
+              : "请先保存文档后再查看历史修改。"}
+          </p>
         </div>
+        <div className="history-page-actions">
+          <button type="button" className="secondary" onClick={() => enterEditor()}>
+            返回编辑
+          </button>
+          <button type="button" className="secondary" onClick={showWelcome}>
+            开始页
+          </button>
+          {entries.length > 0 && workspaceId && (
+            <button
+              type="button"
+              className="danger"
+              disabled={clearing}
+              onClick={() => void handleClear()}
+            >
+              {clearing ? "清空中…" : "清空历史"}
+            </button>
+          )}
+        </div>
+      </div>
 
+      <div className="history-page-body">
         {!workspaceId ? (
           <div className="history-empty">当前没有打开的文档。</div>
         ) : loading ? (
@@ -136,7 +125,7 @@ export function DocumentHistoryDialog({
             暂无历史修改。每次手动保存后会记录与上一版本的 Markdown 差异，并随文档一并保存。
           </div>
         ) : (
-          <div className="history-layout">
+          <div className="history-layout history-layout-page">
             <aside className="history-list">
               {entries.map((entry) => (
                 <button

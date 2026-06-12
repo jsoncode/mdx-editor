@@ -7,8 +7,9 @@ import { search } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { runRedo, runUndo } from "../lib/editorHistory";
-import { editorHighlight, editorTheme } from "../lib/editorTheme";
+import { editorHighlight, editorTheme, selectionTextPlugin } from "../lib/editorTheme";
 import { applyMarkdownFormat, type MarkdownFormatAction } from "../lib/markdownFormat";
+import { useDocumentStore } from "../stores/documentStore";
 import { useEditorStore } from "../stores/editorStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
@@ -93,7 +94,14 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     }));
 
     useEffect(() => {
-      return () => onCreateEditor?.(null);
+      return () => {
+        const view = editorRef.current?.view;
+        if (view) {
+          const latest = view.state.doc.toString();
+          useDocumentStore.getState().setContent(latest);
+        }
+        onCreateEditor?.(null);
+      };
     }, [onCreateEditor]);
 
     useEffect(() => {
@@ -119,7 +127,6 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
     const extensions = useMemo(
       () => [
-        editorTheme,
         editorHighlight,
         historyCompartmentRef.current.of(cmHistory({ minDepth: editorHistoryDepth })),
         keymap.of(historyKeymap),
@@ -129,6 +136,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           base: markdownLanguage,
           codeLanguages: languages,
         }),
+        selectionTextPlugin,
+        editorTheme,
       ],
       [editorHistoryDepth],
     );

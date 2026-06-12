@@ -172,6 +172,13 @@ pub fn pull(vault_path: &Path, config: &GitSyncConfig) -> AppResult<GitPullResul
             has_conflicts: false,
         });
     }
+    if config.remote_url.trim().is_empty() || config.token.trim().is_empty() {
+        return Ok(GitPullResult {
+            updated: false,
+            message: "Git 同步未配置完整".to_string(),
+            has_conflicts: false,
+        });
+    }
 
     let branch = config.effective_branch();
     let repo = open_or_init(vault_path)?;
@@ -314,6 +321,9 @@ pub fn push_in_process(
     message: &str,
 ) -> AppResult<()> {
     if !config.enabled {
+        return Ok(());
+    }
+    if config.remote_url.trim().is_empty() || config.token.trim().is_empty() {
         return Ok(());
     }
 

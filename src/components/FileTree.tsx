@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { isVaultFile, isVaultFolder, type VaultTreeNode } from "../types/vault";
 
+/** 每层缩进（px） */
+const VAULT_TREE_INDENT = 20;
+/** 根级左侧留白（px） */
+const VAULT_TREE_BASE_PADDING = 8;
+
+function treeRowPadding(depth: number): number {
+  return VAULT_TREE_BASE_PADDING + depth * VAULT_TREE_INDENT;
+}
+
 interface FileTreeProps {
   vaultPath: string;
   nodes: VaultTreeNode[];
@@ -90,12 +99,13 @@ function FileTreeNodeItem({
         <button
           type="button"
           className={`vault-tree-file${active ? " active" : ""}`}
-          style={{ paddingLeft: `${12 + depth * 16}px` }}
+          style={{ paddingLeft: `${treeRowPadding(depth)}px` }}
           onClick={() => onOpenFile(node.path)}
           onContextMenu={(event) => onFileContextMenu(event, node)}
           title={node.path}
           role="treeitem"
         >
+          <span className="vault-tree-toggle-spacer" aria-hidden="true" />
           <FileIcon />
           <span className="vault-tree-label">{node.name}</span>
         </button>
@@ -109,7 +119,10 @@ function FileTreeNodeItem({
 
   return (
     <li className="vault-tree-item" role="none">
-      <div className="vault-tree-folder-row">
+      <div
+        className="vault-tree-folder-row"
+        style={{ paddingLeft: `${treeRowPadding(depth)}px` }}
+      >
         <button
           type="button"
           className="vault-tree-toggle"
@@ -121,7 +134,6 @@ function FileTreeNodeItem({
         <button
           type="button"
           className={`vault-tree-folder${selected ? " selected" : ""}`}
-          style={{ paddingLeft: `${4 + depth * 16}px` }}
           onClick={() => {
             onSelectFolder(node.relative_path);
             if (!expanded) onToggleFolder(node.relative_path);
@@ -135,7 +147,7 @@ function FileTreeNodeItem({
           <span className="vault-tree-label">{node.name}</span>
         </button>
       </div>
-      {expanded && node.children.length > 0 && (
+      {expanded && (
         <FileTree
           vaultPath={vaultPath}
           nodes={node.children}

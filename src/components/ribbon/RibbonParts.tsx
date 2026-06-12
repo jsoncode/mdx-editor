@@ -76,6 +76,28 @@ export function RibbonMenuItem({ label, onClick, icon }: RibbonMenuItemProps) {
   );
 }
 
+interface RibbonQuickButtonProps {
+  label: string;
+  onClick: () => void;
+  icon?: ReactNode;
+  title?: string;
+  active?: boolean;
+}
+
+export function RibbonQuickButton({ label, onClick, icon, title, active }: RibbonQuickButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`ribbon-quick-btn${active ? " active" : ""}`}
+      title={title ?? label}
+      onClick={onClick}
+    >
+      {icon && <span className="ribbon-quick-btn-icon">{icon}</span>}
+      <span className="ribbon-quick-btn-label">{label}</span>
+    </button>
+  );
+}
+
 interface LayoutToggleProps {
   mode: "edit" | "preview" | "split";
   onChange: (mode: "edit" | "preview" | "split") => void;
@@ -127,6 +149,16 @@ export function IconSave() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path d="M17 21v-8H7v8M7 3v5h8" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+export function IconHistory() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 3v5h5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3.05 13A9 9 0 1 0 12 3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 7v5l3 2" fill="none" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }

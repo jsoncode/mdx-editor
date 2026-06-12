@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
+import type { EditorView } from "@codemirror/view";
 import { useAssetInsert } from "../hooks/useAssetInsert";
 import { useDocumentActions } from "../hooks/useDocumentActions";
 import { useDocumentStore } from "../stores/documentStore";
@@ -16,16 +17,16 @@ function EditorPane({
   setContent,
   handleDrop,
   handlePaste,
-  setEditorView,
   previewHtml,
+  onCreateEditor,
 }: {
   editorRef: React.RefObject<MarkdownEditorHandle | null>;
   content: string;
   setContent: (value: string) => void;
   handleDrop: (event: React.DragEvent) => void;
   handlePaste: (event: ClipboardEvent) => void;
-  setEditorView: (view: import("@codemirror/view").EditorView | null) => void;
   previewHtml: string;
+  onCreateEditor: (view: EditorView | null) => void;
 }) {
   const { handleInsertImage, handleInsertMedia } = useDocumentActions(previewHtml);
 
@@ -42,7 +43,7 @@ function EditorPane({
         onChange={setContent}
         onDrop={handleDrop}
         onPaste={handlePaste}
-        onCreateEditor={(view) => setEditorView(view)}
+        onCreateEditor={onCreateEditor}
       />
     </div>
   );
@@ -59,6 +60,13 @@ export function SplitEditor() {
   const searchOpen = useUiStore((s) => s.searchOpen);
   const layoutMode = useUiStore((s) => s.layoutMode);
   const setEditorView = useEditorStore((s) => s.setView);
+
+  const handleEditorView = useCallback(
+    (view: EditorView | null) => {
+      setEditorView(view);
+    },
+    [setEditorView],
+  );
 
   const { handleOpenPath } = useDocumentActions(previewHtml);
 
@@ -88,8 +96,8 @@ export function SplitEditor() {
     setContent,
     handleDrop,
     handlePaste,
-    setEditorView,
     previewHtml,
+    onCreateEditor: handleEditorView,
   };
 
   return (

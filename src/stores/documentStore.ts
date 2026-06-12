@@ -2,10 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { clearAssetCache } from "../lib/assetResolver";
 import { applyDocumentMetadata } from "../lib/documentMetadata";
+import { isPlainMdPath } from "../lib/documentPaths";
 import { recordDocumentHistory } from "../lib/documentHistory";
 import { isPathInVault } from "../lib/gitSync";
 import { pullVaultBeforeAccess, pushVaultAfterSave } from "../lib/gitSyncWorkflow";
 import { addRecentFile } from "../lib/recentFiles";
+import { flushEditorContentToStore, getEditorFlushStats } from "../lib/editorContent";
+import { diag, diagSaveCloseState } from "../lib/diagnosticLog";
+import { saveGuard } from "../lib/saveGuard";
 import type { DocumentState, Manifest, SaveStatus } from "../types/document";
 import type { RecentFileEntry } from "../types/recent";
 import { useSettingsStore } from "./settingsStore";
@@ -130,62 +134,107 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   saveDocument: async (path?: string) => {
-    const { workspaceId, content, savedContent } = get();
-    if (!workspaceId) return null;
-
-    set({ saveStatus: "saving" });
-    await invoke("update_document_content", { workspaceId, content });
-
-    const { recordDeviceInfo, recordLocation, documentHistoryDepth } =
-      useSettingsStore.getState();
-    const manifest = await applyDocumentMetadata(
-      workspaceId,
-      recordDeviceInfo,
-      recordLocation,
-    );
-
-    if (savedContent !== content) {
-      await recordDocumentHistory(workspaceId, savedContent, content, documentHistoryDepth);
+    const { workspaceId } = get();
+    if (!workspaceId) {
+      diag("save", "saveDocument_skipped_no_workspace", {}, "warn");
+      return null;
     }
 
-    const savedPath = await invoke<string>("save_document", {
-      workspaceId,
-      path: path ?? null,
-    });
+    diagSaveCloseState("saveDocument_start", { targetPath: path ?? null });
+    saveGuard.begin();
+    const flushed = flushEditorContentToStore();
+    diag("save", "saveDocument_flush", { flushed, ...getEditorFlushStats() }, flushed ? "info" : "warn");
+    try {
+      const { content, savedContent: previousContent, filePath, manifest: currentManifest } = get();
 
-    const finalPath = savedPath ?? get().filePath;
-    const vaultPath = useVaultStore.getState().vaultPath;
-    if (finalPath && vaultPath && isPathInVault(finalPath, vaultPath)) {
-      pushVaultAfterSave(vaultPath, finalPath);
-    }
+      set({ saveStatus: "saving" });
+      diag("save", "update_document_content_call", { contentLen: content.length });
+      await invoke("update_document_content", { workspaceId, content });
 
-    if (savedPath) {
-      const recentFiles = await addRecentFile(savedPath);
-      set({
-        filePath: savedPath,
-        savedContent: content,
-        manifest,
-        isDirty: false,
-        saveStatus: "saved",
-        recentFiles,
+      const targetPath = path ?? filePath;
+      const isPlainMdSave = targetPath != null && isPlainMdPath(targetPath);
+
+      let manifest = currentManifest;
+      if (!isPlainMdSave) {
+        const { recordDeviceInfo, recordLocation, documentHistoryDepth } =
+          useSettingsStore.getState();
+        manifest = await applyDocumentMetadata(
+          workspaceId,
+          recordDeviceInfo,
+          recordLocation,
+        );
+
+        if (previousContent !== content) {
+          await recordDocumentHistory(workspaceId, previousContent, content, documentHistoryDepth);
+        }
+      }
+
+      const saved = await invoke<{ path: string; content: string }>("save_document", {
+        workspaceId,
+        path: path ?? null,
       });
-      clearAssetCache();
-      return recentFiles;
-    }
+      diag("save", "save_document_ipc_ok", {
+        savedPath: saved?.path ?? null,
+        savedContentLen: saved?.content?.length ?? null,
+      });
 
-    set({ savedContent: content, isDirty: false, saveStatus: "saved" });
-    return null;
+      const savedPath = saved?.path ?? null;
+      const savedContent = saved?.content ?? content;
+
+      const finalPath = savedPath ?? get().filePath;
+      const vaultPath = useVaultStore.getState().vaultPath;
+      if (finalPath && vaultPath && isPathInVault(finalPath, vaultPath)) {
+        pushVaultAfterSave(vaultPath, finalPath);
+      }
+
+      if (savedPath) {
+        const recentFiles = await addRecentFile(savedPath);
+        set({
+          filePath: savedPath,
+          content: savedContent,
+          savedContent,
+          manifest,
+          isDirty: false,
+          saveStatus: "saved",
+          recentFiles,
+        });
+        clearAssetCache();
+        return recentFiles;
+      }
+
+      set({ savedContent, isDirty: false, saveStatus: "saved" });
+      diagSaveCloseState("saveDocument_done");
+      return null;
+    } catch (error) {
+      diag(
+        "save",
+        "saveDocument_error",
+        { error: error instanceof Error ? error.message : String(error) },
+        "error",
+      );
+      set({ saveStatus: "dirty" });
+      throw error;
+    } finally {
+      saveGuard.end();
+    }
   },
 
   autosaveDocument: async () => {
-    const { workspaceId, content, isDirty } = get();
+    const { workspaceId, isDirty } = get();
     if (!workspaceId || !isDirty) return;
 
-    set({ saveStatus: "saving" });
-    await invoke("update_document_content", { workspaceId, content });
-    await invoke("autosave_document", { workspaceId });
-    clearAssetCache();
-    set({ saveStatus: "dirty" });
+    saveGuard.begin();
+    flushEditorContentToStore();
+    try {
+      const { content } = get();
+      set({ saveStatus: "saving" });
+      await invoke("update_document_content", { workspaceId, content });
+      await invoke("autosave_document", { workspaceId });
+      clearAssetCache();
+      set({ saveStatus: "dirty" });
+    } finally {
+      saveGuard.end();
+    }
   },
 
   syncContent: async () => {
@@ -212,6 +261,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   closeDocument: async () => {
     const { workspaceId } = get();
+    diagSaveCloseState("closeDocument_start", { workspaceId });
     if (workspaceId) {
       await invoke("close_document", { workspaceId });
     }

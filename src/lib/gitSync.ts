@@ -14,7 +14,7 @@ export function toRustGitConfig(settings: GitSyncSettings) {
   return {
     enabled: settings.enabled,
     remoteUrl: settings.remoteUrl.trim(),
-    token: settings.token,
+    token: settings.token.trim(),
     branch: settings.branch.trim() || "main",
     authorName: settings.authorName.trim(),
     authorEmail: settings.authorEmail.trim(),
@@ -22,12 +22,29 @@ export function toRustGitConfig(settings: GitSyncSettings) {
   };
 }
 
+/** Git 同步已开启且远程地址、Token 均已配置 */
+export function isGitSyncConfigured(settings: GitSyncSettings): boolean {
+  if (!settings.enabled) return false;
+  if (!settings.remoteUrl.trim()) return false;
+  if (!settings.token.trim()) return false;
+  return true;
+}
+
+export function describeGitSyncConfig(settings: GitSyncSettings) {
+  return {
+    enabled: settings.enabled,
+    hasRemoteUrl: Boolean(settings.remoteUrl.trim()),
+    hasToken: Boolean(settings.token.trim()),
+    configured: isGitSyncConfigured(settings),
+  };
+}
+
 export async function pullVaultGit(
   vaultPath: string,
   settings: GitSyncSettings,
 ): Promise<GitPullResult> {
-  if (!settings.enabled) {
-    return { updated: false, message: "Git 同步未启用", hasConflicts: false };
+  if (!isGitSyncConfigured(settings)) {
+    return { updated: false, message: "Git 同步未配置完整", hasConflicts: false };
   }
   return invoke<GitPullResult>("git_sync_pull", {
     vaultPath,
@@ -40,7 +57,7 @@ export async function pushVaultGit(
   settings: GitSyncSettings,
   fileName?: string,
 ): Promise<void> {
-  if (!settings.enabled) return;
+  if (!isGitSyncConfigured(settings)) return;
   const template = settings.commitMessageTemplate.trim() || "备份: {{date}}";
   const message = template
     .replace("{{date}}", new Date().toLocaleString())

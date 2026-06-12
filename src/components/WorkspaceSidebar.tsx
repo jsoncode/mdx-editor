@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useVaultActions } from "../hooks/useVaultActions";
 import { useVaultTreeMenu } from "../hooks/useVaultTreeMenu";
+import { isPlainMdPath } from "../lib/documentPaths";
 import { useDocumentStore } from "../stores/documentStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { getVaultName } from "../types/vault";
@@ -25,6 +26,8 @@ export function WorkspaceSidebar() {
   const setSelectedFolder = useVaultStore((s) => s.setSelectedFolder);
   const createFolder = useVaultStore((s) => s.createFolder);
   const refreshTree = useVaultStore((s) => s.refreshTree);
+  const expandAllFolders = useVaultStore((s) => s.expandAllFolders);
+  const collapseAllFolders = useVaultStore((s) => s.collapseAllFolders);
   const setSidebarOpen = useVaultStore((s) => s.setSidebarOpen);
 
   const filePath = useDocumentStore((s) => s.filePath);
@@ -42,9 +45,60 @@ export function WorkspaceSidebar() {
 
     const { target } = treeMenu.contextMenu;
 
+    if (target.kind === "workspace") {
+      return [
+        {
+          id: "new-mdx",
+          label: "新建 MDX 文档",
+          onClick: () => {
+            void (async () => {
+              const path = await treeMenu.createDocumentInWorkspace(target.folderRelative, "mdx");
+              if (path) handleOpenFileInVault(path);
+            })();
+          },
+        },
+        {
+          id: "new-md",
+          label: "新建 Markdown 文档",
+          onClick: () => {
+            void (async () => {
+              const path = await treeMenu.createDocumentInWorkspace(target.folderRelative, "md");
+              if (path) handleOpenFileInVault(path);
+            })();
+          },
+        },
+        {
+          id: "new-folder",
+          label: "新建文件夹",
+          onClick: () => {
+            setSelectedFolder(target.folderRelative);
+            setCreatingFolder(true);
+          },
+        },
+        { id: "sep-1", separator: true },
+        {
+          id: "refresh",
+          label: "刷新文档树",
+          onClick: () => void refreshTree(),
+        },
+      ];
+    }
+
     if (target.kind === "file") {
+      const mdItems: VaultContextMenuItem[] = isPlainMdPath(target.path)
+        ? [
+            {
+              id: "convert-mdx",
+              label: "转换为 MDX",
+              onClick: () => void treeMenu.convertMdToMdx(target),
+            },
+            { id: "sep-convert", separator: true },
+          ]
+        : [];
+
       return [
         { id: "open", label: "打开", onClick: () => handleOpenFileInVault(target.path) },
+        ...mdItems,
         { id: "sep-1", separator: true },
         { id: "rename", label: "重命名", onClick: () => treeMenu.setRenameTarget(target) },
         { id: "delete", label: "删除", danger: true, onClick: () => void treeMenu.deleteFile(target) },
@@ -61,11 +115,21 @@ export function WorkspaceSidebar() {
 
     return [
       {
-        id: "new-doc",
-        label: "新建文档",
+        id: "new-mdx",
+        label: "新建 MDX 文档",
         onClick: () => {
           void (async () => {
-            const path = await treeMenu.createDocumentInFolder(target);
+            const path = await treeMenu.createDocumentInFolder(target, "mdx");
+            if (path) handleOpenFileInVault(path);
+          })();
+        },
+      },
+      {
+        id: "new-md",
+        label: "新建 Markdown 文档",
+        onClick: () => {
+          void (async () => {
+            const path = await treeMenu.createDocumentInFolder(target, "md");
             if (path) handleOpenFileInVault(path);
           })();
         },
@@ -95,7 +159,15 @@ export function WorkspaceSidebar() {
       },
       { id: "copy", label: "复制路径", onClick: () => void treeMenu.copyPath(target.path) },
     ];
-  }, [treeMenu, handleOpenFileInVault, setSelectedFolder]);
+  }, [treeMenu, handleOpenFileInVault, setSelectedFolder, refreshTree]);
+
+  const handleTreeBackgroundContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest(".vault-tree-item, .vault-tree-file, .vault-tree-folder, .vault-tree-toggle")) {
+      return;
+    }
+    treeMenu.openWorkspaceContextMenu(event);
+  };
 
   if (!vaultPath) {
     return (
@@ -121,7 +193,7 @@ export function WorkspaceSidebar() {
           <IconButton title="新建文件夹" label="新建文件夹" onClick={() => setCreatingFolder(true)}>
             <PlusFolderIcon />
           </IconButton>
-          <IconButton title="刷新" label="刷新文档树" onClick={() => void refreshTree()}>
+          <IconButton title="刷新文档树" label="刷新文档树" onClick={() => void refreshTree()}>
             <RefreshIcon />
           </IconButton>
           <IconButton title="切换工作区" label="打开其他工作区" onClick={() => void handleOpenVault()}>
@@ -142,11 +214,34 @@ export function WorkspaceSidebar() {
         />
       )}
 
-      <div className="workspace-sidebar-tree">
+      {tree.length > 0 && (
+        <div className="workspace-tree-toolbar">
+          <button
+            type="button"
+            className="workspace-tree-toolbar-btn"
+            title="展开所有文件夹"
+            onClick={() => expandAllFolders()}
+          >
+            <ExpandAllIcon />
+            <span>全部展开</span>
+          </button>
+          <button
+            type="button"
+            className="workspace-tree-toolbar-btn"
+            title="收起所有文件夹"
+            onClick={() => collapseAllFolders()}
+          >
+            <CollapseAllIcon />
+            <span>全部收起</span>
+          </button>
+        </div>
+      )}
+
+      <div className="workspace-sidebar-tree" onContextMenu={handleTreeBackgroundContextMenu}>
         {loading ? (
           <p className="workspace-sidebar-hint">加载中...</p>
         ) : tree.length === 0 ? (
-          <p className="workspace-sidebar-hint">暂无文档，点击上方 + 新建。</p>
+          <p className="workspace-sidebar-hint">暂无文档，右键可新建，或点击上方 + 新建。</p>
         ) : (
           <FileTree
             vaultPath={vaultPath}
@@ -240,10 +335,32 @@ function RefreshIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
-        d="M11.5 2.5A5 5 0 0 1 13 7M4.5 13.5A5 5 0 0 1 3 9M13 2v3.5H9.5M3 14v-3.5h3.5"
+        d="M12.8 5.2A5.4 5.4 0 0 0 4.1 3.6"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.2"
+        strokeWidth="1.45"
+        strokeLinecap="round"
+      />
+      <path
+        d="M11.2 2.6h2.1v2.1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.45"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3.2 10.8A5.4 5.4 0 0 0 11.9 12.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.45"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4.8 13.4H2.7v-2.1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.45"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -264,6 +381,24 @@ function CloseIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ExpandAllIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 5.5L8 10l5-4.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 9.5L8 14l5-4.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CollapseAllIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 6.5L8 2l5 4.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 10.5L8 6l5 4.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

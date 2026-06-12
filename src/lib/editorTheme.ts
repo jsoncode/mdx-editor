@@ -1,5 +1,12 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorView } from "@codemirror/view";
+import { RangeSetBuilder } from "@codemirror/state";
+import {
+  Decoration,
+  DecorationSet,
+  EditorView,
+  ViewPlugin,
+  ViewUpdate,
+} from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
 export const EDITOR_FONT_FAMILY =
@@ -21,57 +28,98 @@ const markdownHighlight = HighlightStyle.define([
   { tag: tags.monospace, fontFamily: EDITOR_FONT_FAMILY },
 ]);
 
-export const editorTheme = EditorView.theme({
-  "&": {
-    fontSize: "15px",
-    height: "100%",
+const selectedTextStyle = Decoration.mark({
+  class: "cm-selectedText",
+});
+
+/** 选中时将文字设为浅色，避免语法高亮颜色与选中背景对比不足 */
+export const selectionTextPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet = Decoration.none;
+
+    constructor(view: EditorView) {
+      this.decorations = this.build(view);
+    }
+
+    update(update: ViewUpdate) {
+      if (update.selectionSet || update.docChanged || update.focusChanged) {
+        this.decorations = this.build(update.view);
+      }
+    }
+
+    build(view: EditorView) {
+      if (!view.hasFocus) {
+        return Decoration.none;
+      }
+
+      const builder = new RangeSetBuilder<Decoration>();
+      for (const range of view.state.selection.ranges) {
+        if (range.empty) continue;
+        builder.add(range.from, range.to, selectedTextStyle);
+      }
+      return builder.finish();
+    }
   },
-  ".cm-scroller": {
-    fontFamily: EDITOR_FONT_FAMILY,
-    lineHeight: "1.75",
-    fontFeatureSettings: '"zero" 1, "cv01" 1',
-  },
-  ".cm-content": {
-    padding: "16px 12px",
-    caretColor: "#2563eb",
-  },
-  ".cm-gutters": {
-    backgroundColor: "#f8f9fb",
-    color: "#9aa0a6",
-    borderRight: "1px solid #e8eaed",
-  },
-  ".cm-activeLineGutter": {
-    backgroundColor: "#eef2ff",
-  },
-  ".cm-activeLine": {
-    backgroundColor: "#f5f8ff",
-  },
-  ".cm-selectionBackground": {
-    backgroundColor: "#0078d4 !important",
-  },
-  "&.cm-focused .cm-selectionBackground": {
-    backgroundColor: "#0078d4 !important",
-  },
-  "&:not(.cm-focused) .cm-selectionBackground": {
-    backgroundColor: "#b4d7fe !important",
-  },
-  ".cm-content ::selection": {
-    backgroundColor: "#0078d4 !important",
-    color: "#ffffff",
-  },
-  ".cm-line": {
-    padding: "0 4px",
-  },
-  ".cm-heading": {
-    textDecoration: "none !important",
-  },
-  ".tok-heading": {
-    textDecoration: "none !important",
-  },
-  ".tok-heading1, .tok-heading2, .tok-heading3, .tok-heading4, .tok-heading5, .tok-heading6":
-    {
+  { decorations: (plugin) => plugin.decorations },
+);
+
+export const editorTheme = EditorView.theme(
+  {
+    "&": {
+      fontSize: "15px",
+      height: "100%",
+    },
+    ".cm-scroller": {
+      fontFamily: EDITOR_FONT_FAMILY,
+      lineHeight: "1.75",
+      fontFeatureSettings: '"zero" 1, "cv01" 1',
+      overflow: "auto",
+      minHeight: 0,
+    },
+    ".cm-content": {
+      padding: "16px 12px",
+      caretColor: "#2563eb",
+    },
+    ".cm-gutters": {
+      backgroundColor: "#f8f9fb",
+      color: "#9aa0a6",
+      borderRight: "1px solid #e8eaed",
+    },
+    ".cm-activeLineGutter": {
+      backgroundColor: "#eef2ff",
+    },
+    ".cm-activeLine": {
+      backgroundColor: "#f5f8ff",
+    },
+    /* 覆盖 CodeMirror 默认浅色选中（#d7d4f0），需与默认主题同等选择器优先级 */
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+      backgroundColor: "#0078d4 !important",
+    },
+    "& > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+      backgroundColor: "#0078d4 !important",
+    },
+    "&:not(.cm-focused) > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+      backgroundColor: "#0078d4 !important",
+      opacity: "0.45",
+    },
+    ".cm-selectedText": {
+      color: "#ffffff !important",
+    },
+    ".cm-line": {
+      padding: "0 4px",
+    },
+    ".cm-heading": {
       textDecoration: "none !important",
     },
-});
+    ".tok-heading": {
+      textDecoration: "none !important",
+    },
+    ".tok-heading1, .tok-heading2, .tok-heading3, .tok-heading4, .tok-heading5, .tok-heading6":
+      {
+        textDecoration: "none !important",
+      },
+  },
+  { dark: false },
+);
 
 export const editorHighlight = syntaxHighlighting(markdownHighlight);

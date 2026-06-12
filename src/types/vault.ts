@@ -39,4 +39,8 @@ export interface VaultItemInfo {
 
 export type VaultContextTarget =
   | { kind: "file"; path: string; name: string; relativePath: string }
-  | { kind: "folder"; path: string; name: string; relativePath: string };
+  | { kind: "folder"; path: string; name: string; relativePath: string }
+  | { kind: "workspace"; vaultPath: string; folderRelative: string };
+
+/** 文件或文件夹（不含工作区空白区域） */
+export type VaultItemTarget = Exclude<VaultContextTarget, { kind: "workspace" }>;

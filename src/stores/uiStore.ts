@@ -2,7 +2,7 @@ import { message } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { useDocumentStore } from "./documentStore";
 
-export type AppView = "welcome" | "editor" | "recent";
+export type AppView = "welcome" | "editor" | "recent" | "settings" | "history";
 export type LayoutMode = "edit" | "preview" | "split";
 
 interface UiStore {
@@ -10,15 +10,13 @@ interface UiStore {
   layoutMode: LayoutMode;
   searchOpen: boolean;
   switchDialogOpen: boolean;
-  settingsOpen: boolean;
-  historyOpen: boolean;
   propertiesOpen: boolean;
   pendingSwitch: (() => Promise<void>) | null;
   setAppView: (view: AppView) => void;
   enterEditor: () => void;
   showWelcome: () => void;
-  setSettingsOpen: (open: boolean) => void;
-  setHistoryOpen: (open: boolean) => void;
+  showSettings: () => void;
+  showHistory: () => void;
   setPropertiesOpen: (open: boolean) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   setSearchOpen: (open: boolean) => void;
@@ -32,16 +30,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
   layoutMode: "split",
   searchOpen: false,
   switchDialogOpen: false,
-  settingsOpen: false,
-  historyOpen: false,
   propertiesOpen: false,
   pendingSwitch: null,
 
   setAppView: (appView) => set({ appView }),
   enterEditor: () => set({ appView: "editor" }),
   showWelcome: () => set({ appView: "welcome", searchOpen: false }),
-  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
-  setHistoryOpen: (historyOpen) => set({ historyOpen }),
+  showSettings: () => set({ appView: "settings", searchOpen: false }),
+  showHistory: () => set({ appView: "history", searchOpen: false }),
   setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),
   setLayoutMode: (layoutMode) => set({ layoutMode, appView: "editor" }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),

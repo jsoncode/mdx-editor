@@ -29,3 +29,5 @@ git2 = "0.20"
 thiserror = "2"
 [target.'cfg(windows)'.dependencies]
 clipboard-win = "5"
+webview2-com = "0.38"
+windows-core = "0.61"

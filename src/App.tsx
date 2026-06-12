@@ -8,8 +8,8 @@ import { EditorLayout } from "./components/EditorLayout";
 import { RecentFilesPage } from "./components/RecentFilesPage";
 import { WelcomePage } from "./components/WelcomePage";
 import { UnsavedDialog } from "./components/UnsavedDialog";
-import { SettingsDialog } from "./components/SettingsDialog";
-import { DocumentHistoryDialog } from "./components/DocumentHistoryDialog";
+import { SettingsPage } from "./components/SettingsPage";
+import { DocumentHistoryPage } from "./components/DocumentHistoryPage";
 import { DocumentPropertiesDialog } from "./components/DocumentPropertiesDialog";
 import { useAutosave } from "./hooks/useAutosave";
 import { useDocumentActions } from "./hooks/useDocumentActions";
@@ -19,7 +19,11 @@ import { getRecentFileEntries } from "./lib/recentFiles";
 import { isInsertablePath, isMarkdownDocumentPath } from "./lib/media";
 import { MARKDOWN_DOCUMENT_SAVE_FILTERS, defaultSavePath, isPlainMdPath } from "./lib/documentPaths";
 import { promptPlainMdSaveChoice } from "./lib/savePrompt";
+import { notifyGitPushFailed } from "./lib/gitSyncWorkflow";
 import { isIdleSession } from "./lib/session";
+import { saveGuard } from "./lib/saveGuard";
+import { isCloseDocumentShortcut, isSaveShortcut, consumeShortcut } from "./lib/appShortcuts";
+import { diag, diagSaveCloseState, installDiagnosticHandlers, getDiagnosticLogDir } from "./lib/diagnosticLog";
 import { useDocumentStore } from "./stores/documentStore";
 import { useUiStore } from "./stores/uiStore";
 import { useVaultStore } from "./stores/vaultStore";
@@ -29,10 +33,13 @@ import "./App.css";
 function App() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [documentCloseDialogOpen, setDocumentCloseDialogOpen] = useState(false);
+  const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
   const forceClosingRef = useRef(false);
   const isDirtyRef = useRef(false);
+  const isHandlingCloseRef = useRef(false);
+  const requestQuitAppRef = useRef<() => void>(() => undefined);
+  const requestCloseDocumentRef = useRef<() => void>(() => undefined);
 
-  const isDirty = useDocumentStore((s) => s.isDirty);
   const previewHtml = useDocumentStore((s) => s.previewHtml);
   const filePath = useDocumentStore((s) => s.filePath);
   const workspaceId = useDocumentStore((s) => s.workspaceId);
@@ -43,14 +50,10 @@ function App() {
   const closeDocument = useDocumentStore((s) => s.closeDocument);
   const appView = useUiStore((s) => s.appView);
   const searchOpen = useUiStore((s) => s.searchOpen);
-  const settingsOpen = useUiStore((s) => s.settingsOpen);
   const manifest = useDocumentStore((s) => s.manifest);
-  const historyOpen = useUiStore((s) => s.historyOpen);
   const propertiesOpen = useUiStore((s) => s.propertiesOpen);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const setAppView = useUiStore((s) => s.setAppView);
-  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
-  const setHistoryOpen = useUiStore((s) => s.setHistoryOpen);
   const setPropertiesOpen = useUiStore((s) => s.setPropertiesOpen);
   const switchDialogOpen = useUiStore((s) => s.switchDialogOpen);
   const resolveDocumentSwitch = useUiStore((s) => s.resolveDocumentSwitch);
@@ -69,11 +72,38 @@ function App() {
   useAutosave();
   useWindowState();
   const { printDocument } = usePrintLayout();
-  const { handleNew, handleOpen } = useDocumentActions(previewHtml);
+  const { handleNew, handleOpen, handleSave } = useDocumentActions(previewHtml);
 
   useEffect(() => {
-    isDirtyRef.current = isDirty;
-  }, [isDirty]);
+    let unlisten: (() => void) | undefined;
+
+    void listen<string>("git-push-failed", (event) => {
+      void notifyGitPushFailed(event.payload);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    installDiagnosticHandlers();
+    void getDiagnosticLogDir()
+      .then((dir) => diag("lifecycle", "log_dir_ready", { dir }))
+      .catch((error) => diag("lifecycle", "log_dir_error", { error: String(error) }, "warn"));
+    void invoke("disable_webview_accelerators").catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    isDirtyRef.current = useDocumentStore.getState().isDirty;
+    return useDocumentStore.subscribe((state, prev) => {
+      if (state.isDirty !== prev.isDirty) {
+        isDirtyRef.current = state.isDirty;
+      }
+    });
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -147,36 +177,97 @@ function App() {
   }, [openExternalDocument]);
 
   const forceDestroy = useCallback(async () => {
+    if (saveGuard.shouldBlockClose()) {
+      diag("close", "forceDestroy_blocked_by_saveGuard", saveGuard.getDebugInfo(), "warn");
+      return;
+    }
+    diag("close", "forceDestroy", {}, "warn");
     forceClosingRef.current = true;
     isDirtyRef.current = false;
     setCloseDialogOpen(false);
+    setQuitConfirmOpen(false);
     await getCurrentWindow().destroy();
   }, []);
 
   const returnToWelcomeAfterClose = useCallback(async () => {
-    await closeDocument();
-    setAppView("welcome");
-    setSearchOpen(false);
-    await getCurrentWindow().setTitle("MDX Editor");
+    if (isHandlingCloseRef.current) {
+      diag("close", "returnToWelcome_skipped_handling", {}, "warn");
+      return;
+    }
+    if (saveGuard.shouldBlockClose()) {
+      diag("close", "returnToWelcome_blocked_by_saveGuard", saveGuard.getDebugInfo(), "warn");
+      return;
+    }
+    diagSaveCloseState("returnToWelcome_start");
+    isHandlingCloseRef.current = true;
+    try {
+      await closeDocument();
+      setAppView("welcome");
+      setSearchOpen(false);
+      await getCurrentWindow().setTitle("MDX Editor");
+      diag("close", "returnToWelcome_done");
+    } finally {
+      isHandlingCloseRef.current = false;
+    }
   }, [closeDocument, setAppView, setSearchOpen]);
 
-  const requestCloseApp = useCallback(async () => {
-    if (isDirtyRef.current) {
+  const requestQuitApp = useCallback(async () => {
+    if (isHandlingCloseRef.current) {
+      diag("close", "requestQuitApp_skipped_handling", {}, "warn");
+      return;
+    }
+    if (saveGuard.shouldBlockClose()) {
+      diag("close", "requestQuitApp_blocked_by_saveGuard", saveGuard.getDebugInfo(), "warn");
+      return;
+    }
+    if (useDocumentStore.getState().saveStatus === "saving") {
+      diag("close", "requestQuitApp_blocked_saving", {}, "warn");
+      return;
+    }
+
+    const { isDirty, workspaceId } = useDocumentStore.getState();
+    diagSaveCloseState("requestQuitApp", { isDirty, hasWorkspace: Boolean(workspaceId) });
+    if (isDirty) {
       setCloseDialogOpen(true);
       return;
     }
+
+    if (workspaceId) {
+      setQuitConfirmOpen(true);
+      return;
+    }
+
     await forceDestroy();
   }, [forceDestroy]);
 
   const requestCloseDocument = useCallback(() => {
-    if (closeDialogOpen || documentCloseDialogOpen || switchDialogOpen) return;
-
-    if (isIdleSession()) {
-      void requestCloseApp();
+    if (isHandlingCloseRef.current) {
+      diag("close", "requestCloseDocument_skipped_handling", {}, "warn");
+      return;
+    }
+    if (closeDialogOpen || documentCloseDialogOpen || switchDialogOpen || quitConfirmOpen) {
+      diag("close", "requestCloseDocument_skipped_dialog_open", {
+        closeDialogOpen,
+        documentCloseDialogOpen,
+        switchDialogOpen,
+        quitConfirmOpen,
+      });
+      return;
+    }
+    if (saveGuard.shouldBlockClose()) {
+      diag("close", "requestCloseDocument_blocked_by_saveGuard", saveGuard.getDebugInfo(), "warn");
       return;
     }
 
-    if (isDirtyRef.current) {
+    if (isIdleSession()) {
+      diag("close", "requestCloseDocument_idle_to_quit");
+      void requestQuitApp();
+      return;
+    }
+
+    const { isDirty } = useDocumentStore.getState();
+    diagSaveCloseState("requestCloseDocument", { isDirty });
+    if (isDirty) {
       setDocumentCloseDialogOpen(true);
       return;
     }
@@ -186,54 +277,94 @@ function App() {
     closeDialogOpen,
     documentCloseDialogOpen,
     switchDialogOpen,
-    requestCloseApp,
+    quitConfirmOpen,
+    requestQuitApp,
     returnToWelcomeAfterClose,
   ]);
 
   useEffect(() => {
+    requestQuitAppRef.current = () => {
+      void requestQuitApp();
+    };
+    requestCloseDocumentRef.current = requestCloseDocument;
+  }, [requestQuitApp, requestCloseDocument]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "n") {
-        event.preventDefault();
-        void handleNew();
+      if (event.type !== "keydown" || event.repeat) return;
+
+      if (isSaveShortcut(event)) {
+        consumeShortcut(event);
+        diag("shortcut", "ctrl_s", {
+          code: event.code,
+          key: event.key,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+        });
+        diagSaveCloseState("before_ctrl_s_save");
+        saveGuard.runSaveTask(async () => {
+          try {
+            await handleSave();
+            diagSaveCloseState("after_ctrl_s_save");
+          } catch (error) {
+            diag(
+              "save",
+              "handleSave_error",
+              { error: error instanceof Error ? error.message : String(error) },
+              "error",
+            );
+            throw error;
+          }
+        });
         return;
       }
-      if ((event.ctrlKey || event.metaKey) && event.key === "o") {
-        event.preventDefault();
-        void handleOpen();
-        return;
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
-        event.preventDefault();
-        void saveDocument();
-        return;
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key === "w") {
-        event.preventDefault();
+      if (isCloseDocumentShortcut(event)) {
+        consumeShortcut(event);
+        diag("shortcut", "ctrl_w", {
+          code: event.code,
+          key: event.key,
+          blocked: saveGuard.shouldBlockClose(),
+        });
+        if (saveGuard.shouldBlockClose()) {
+          return;
+        }
         requestCloseDocument();
         return;
       }
-      if ((event.ctrlKey || event.metaKey) && event.key === "f") {
-        event.preventDefault();
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyN") {
+        consumeShortcut(event);
+        void handleNew();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyO") {
+        consumeShortcut(event);
+        void handleOpen();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyF") {
+        consumeShortcut(event);
         useUiStore.getState().setSearchOpen(true);
         useUiStore.getState().setAppView("editor");
+        return;
       }
-      if ((event.ctrlKey || event.metaKey) && event.key === "p") {
-        event.preventDefault();
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyP") {
+        consumeShortcut(event);
         printDocument();
+        return;
       }
       if (event.key === "Escape" && searchOpen) {
         setSearchOpen(false);
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [
-    saveDocument,
     searchOpen,
     setSearchOpen,
     printDocument,
     handleNew,
     handleOpen,
+    handleSave,
     requestCloseDocument,
   ]);
 
@@ -242,10 +373,15 @@ function App() {
 
     void getCurrentWindow()
       .onCloseRequested((event) => {
-        if (forceClosingRef.current) return;
-        if (!isDirtyRef.current) return;
+        if (forceClosingRef.current) {
+          diag("close", "CloseRequested_ignored_forceClosing");
+          return;
+        }
         event.preventDefault();
-        setCloseDialogOpen(true);
+        const blocked = saveGuard.shouldBlockClose();
+        diagSaveCloseState("CloseRequested", { blocked });
+        if (blocked) return;
+        requestQuitAppRef.current();
       })
       .then((fn) => {
         unlisten = fn;
@@ -257,6 +393,7 @@ function App() {
   }, []);
 
   const handleCloseSave = async () => {
+    saveGuard.startSaveSession();
     try {
       if (!filePath) {
         const selected = await save({
@@ -287,6 +424,8 @@ function App() {
       await forceDestroy();
     } catch (error) {
       console.error("保存失败:", error);
+    } finally {
+      saveGuard.end();
     }
   };
 
@@ -296,6 +435,7 @@ function App() {
   };
 
   const handleDocumentCloseSave = async () => {
+    saveGuard.startSaveSession();
     try {
       if (!filePath) {
         const selected = await save({
@@ -327,6 +467,8 @@ function App() {
       await returnToWelcomeAfterClose();
     } catch (error) {
       console.error("保存失败:", error);
+    } finally {
+      saveGuard.end();
     }
   };
 
@@ -343,6 +485,8 @@ function App() {
         {appView === "welcome" && <WelcomePage />}
         {appView === "editor" && <EditorLayout />}
         {appView === "recent" && <RecentFilesPage />}
+        {appView === "settings" && <SettingsPage />}
+        {appView === "history" && <DocumentHistoryPage />}
       </main>
 
       <UnsavedDialog
@@ -350,6 +494,17 @@ function App() {
         onSave={() => void handleCloseSave()}
         onDiscard={() => void handleCloseDiscard()}
         onCancel={() => setCloseDialogOpen(false)}
+      />
+
+      <UnsavedDialog
+        open={quitConfirmOpen}
+        variant="confirm"
+        title="退出应用"
+        message="确定要退出 MDX Editor 吗？"
+        confirmLabel="退出"
+        onSave={() => setQuitConfirmOpen(false)}
+        onDiscard={() => void forceDestroy()}
+        onCancel={() => setQuitConfirmOpen(false)}
       />
 
       <UnsavedDialog
@@ -370,17 +525,6 @@ function App() {
         onCancel={() => resolveDocumentSwitch("cancel")}
       />
 
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <DocumentHistoryDialog
-        open={historyOpen}
-        workspaceId={workspaceId}
-        filePath={filePath}
-        onClose={() => setHistoryOpen(false)}
-        onPersistHistory={async () => {
-          if (!filePath) return;
-          await saveDocument();
-        }}
-      />
       <DocumentPropertiesDialog
         open={propertiesOpen}
         workspaceId={workspaceId}

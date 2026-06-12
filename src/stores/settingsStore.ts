@@ -20,6 +20,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   documentHistoryDepth: DEFAULT_DOCUMENT_HISTORY_DEPTH,
   recordDeviceInfo: false,
   recordLocation: false,
+  markdownSingleLineBreaks: false,
   gitSync: DEFAULT_GIT_SYNC,
   loaded: false,
 
@@ -34,6 +35,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       documentHistoryDepth: clampHistoryDepth(settings.documentHistoryDepth),
       recordDeviceInfo: settings.recordDeviceInfo,
       recordLocation: settings.recordLocation,
+      markdownSingleLineBreaks: settings.markdownSingleLineBreaks,
       gitSync: {
         ...DEFAULT_GIT_SYNC,
         ...settings.gitSync,

@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ExtraProps } from "react-markdown";
 import rehypeRaw from "rehype-raw";
-import remarkGfm from "remark-gfm";
+import { buildRemarkPlugins } from "../lib/markdownPlugins";
 import { openAttachmentWithConfirm } from "../lib/attachment";
 import { resolveAssetUrl } from "../lib/assetResolver";
+import { useSettingsStore } from "../stores/settingsStore";
 import {
   extensionFromPath,
   fileNameFromPath,
@@ -156,12 +157,18 @@ export function MarkdownPreview({
   onHtmlChange,
 }: MarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const markdownSingleLineBreaks = useSettingsStore((s) => s.markdownSingleLineBreaks);
+
+  const remarkPlugins = useMemo(
+    () => buildRemarkPlugins(markdownSingleLineBreaks),
+    [markdownSingleLineBreaks],
+  );
 
   useEffect(() => {
     if (containerRef.current && onHtmlChange) {
       onHtmlChange(containerRef.current.innerHTML);
     }
-  }, [content, workspaceId, onHtmlChange]);
+  }, [content, workspaceId, markdownSingleLineBreaks, onHtmlChange]);
 
   const components = useMemo(
     () => ({
@@ -192,7 +199,7 @@ export function MarkdownPreview({
   return (
     <div ref={containerRef} className="markdown-preview">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={remarkPlugins}
         rehypePlugins={[rehypeRaw]}
         components={components}
       >

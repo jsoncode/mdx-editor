@@ -176,7 +176,7 @@ export function VaultRenameDialog({
   onSubmit,
   onClose,
 }: {
-  target: import("../types/vault").VaultContextTarget | null;
+  target: import("../types/vault").VaultItemTarget | null;
   onSubmit: (name: string) => void;
   onClose: () => void;
 }) {

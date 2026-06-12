@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
-import type { VaultTreeNode, VaultItemInfo } from "../types/vault";
+import { isVaultFolder, type VaultTreeNode, type VaultItemInfo } from "../types/vault";
 
 const STORE_PATH = "settings.json";
 const VAULT_PATH_KEY = "vault_path";
@@ -150,4 +150,14 @@ export function getRelativeVaultPath(vaultPath: string, itemPath: string): strin
     return normalizedItem.slice(normalizedVault.length + 1);
   }
   return normalizedItem;
+}
+
+export function collectFolderPaths(nodes: VaultTreeNode[]): string[] {
+  const paths: string[] = [];
+  for (const node of nodes) {
+    if (!isVaultFolder(node)) continue;
+    paths.push(node.relative_path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""));
+    paths.push(...collectFolderPaths(node.children));
+  }
+  return paths;
 }

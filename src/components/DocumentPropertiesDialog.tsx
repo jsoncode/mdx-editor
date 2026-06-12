@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isPlainMdPath } from "../lib/documentPaths";
 import { fetchDocumentManifest } from "../lib/documentMetadata";
 import { getFileName } from "../lib/recentFiles";
 import type { Manifest } from "../types/document";
@@ -61,12 +62,16 @@ export function DocumentPropertiesDialog({
       >
         <h3 id="document-properties-title">文件属性</h3>
         <p className="document-properties-desc">
-          {filePath
-            ? `${getFileName(filePath)} · 属性保存在 manifest.json（MDX 内置或 .md sidecar）`
-            : "文档属性将在首次保存后写入文件。"}
+          {filePath && isPlainMdPath(filePath)
+            ? `${getFileName(filePath)} · 纯 Markdown 文档不含 manifest 属性；请另存为 MDX 以启用。`
+            : filePath
+              ? `${getFileName(filePath)} · 属性保存在 MDX 文档内的 manifest.json 中`
+              : "文档属性将在首次保存为 MDX 后写入文件。"}
         </p>
 
-        {!workspaceId ? (
+        {filePath && isPlainMdPath(filePath) ? (
+          <div className="history-empty">当前为纯 Markdown 文档，不支持文件属性记录。</div>
+        ) : !workspaceId ? (
           <div className="history-empty">当前没有打开的文档。</div>
         ) : loading ? (
           <div className="history-empty">加载中…</div>

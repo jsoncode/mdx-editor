@@ -1,5 +1,8 @@
 import { useDocumentActions } from "../hooks/useDocumentActions";
+import { saveGuard } from "../lib/saveGuard";
+import { diag, diagSaveCloseState } from "../lib/diagnosticLog";
 import { useVaultActions } from "../hooks/useVaultActions";
+import { isPlainMdPath } from "../lib/documentPaths";
 import { useDocumentStore } from "../stores/documentStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { useUiStore } from "../stores/uiStore";
@@ -7,6 +10,7 @@ import {
   IconExport,
   IconImage,
   IconMedia,
+  IconHistory,
   IconNew,
   IconOpen,
   IconPrint,
@@ -16,6 +20,7 @@ import {
   LayoutToggle,
   RibbonMenu,
   RibbonMenuItem,
+  RibbonQuickButton,
 } from "./ribbon/RibbonParts";
 
 interface RibbonProps {
@@ -27,14 +32,16 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
   const setAppView = useUiStore((s) => s.setAppView);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const setLayoutMode = useUiStore((s) => s.setLayoutMode);
-  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
-  const setHistoryOpen = useUiStore((s) => s.setHistoryOpen);
+  const showSettings = useUiStore((s) => s.showSettings);
+  const showHistory = useUiStore((s) => s.showHistory);
   const setPropertiesOpen = useUiStore((s) => s.setPropertiesOpen);
+  const appView = useUiStore((s) => s.appView);
   const searchOpen = useUiStore((s) => s.searchOpen);
   const layoutMode = useUiStore((s) => s.layoutMode);
 
   const filePath = useDocumentStore((s) => s.filePath);
   const saveStatus = useDocumentStore((s) => s.saveStatus);
+  const isPlainMdDocument = filePath != null && isPlainMdPath(filePath);
 
   const actions = useDocumentActions(previewHtml);
   const { handleOpenVault, handleCloseVault } = useVaultActions();
@@ -61,7 +68,21 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
     setSearchOpen(false);
   };
 
+  const openHistoryPage = () => {
+    setSearchOpen(false);
+    showHistory();
+  };
+
   const openEditor = () => setAppView("editor");
+
+  const triggerSave = () => {
+    diag("shortcut", "save_button_click");
+    diagSaveCloseState("before_save_button");
+    saveGuard.runSaveTask(async () => {
+      await actions.handleSave();
+      diagSaveCloseState("after_save_button");
+    });
+  };
 
   return (
     <header className="ribbon">
@@ -70,26 +91,20 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
           <RibbonMenu label="文件">
             <RibbonMenuItem label="新建" icon={<IconNew />} onClick={() => void actions.handleNew()} />
             <RibbonMenuItem label="打开" icon={<IconOpen />} onClick={() => void actions.handleOpen()} />
-            <RibbonMenuItem label="保存" icon={<IconSave />} onClick={() => void actions.handleSave()} />
+            <RibbonMenuItem label="保存" icon={<IconSave />} onClick={triggerSave} />
             <RibbonMenuItem label="另存为" icon={<IconSave />} onClick={() => void actions.handleSaveAs()} />
             <div className="ribbon-menu-divider" role="separator" />
             <RibbonMenuItem label="最近文档" icon={<IconRecent />} onClick={openRecentPage} />
-            <RibbonMenuItem
-              label="历史修改"
-              icon={<IconRecent />}
-              onClick={() => {
-                openEditor();
-                setHistoryOpen(true);
-              }}
-            />
-            <RibbonMenuItem
-              label="文件属性"
-              icon={<IconRecent />}
-              onClick={() => {
-                openEditor();
-                setPropertiesOpen(true);
-              }}
-            />
+            {!isPlainMdDocument && (
+              <RibbonMenuItem
+                label="文件属性"
+                icon={<IconRecent />}
+                onClick={() => {
+                  openEditor();
+                  setPropertiesOpen(true);
+                }}
+              />
+            )}
             <div className="ribbon-menu-divider" role="separator" />
             <RibbonMenuItem label="导出 Markdown" icon={<IconExport />} onClick={() => void actions.handleExportMarkdown()} />
             <RibbonMenuItem label="导出 HTML" icon={<IconExport />} onClick={() => void actions.handleExportHtml()} />
@@ -142,10 +157,31 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
             <RibbonMenuItem
               label="偏好设置"
               icon={<IconRecent />}
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => {
+                setSearchOpen(false);
+                showSettings();
+              }}
             />
           </RibbonMenu>
         </nav>
+
+        <div className="ribbon-quick-actions" aria-label="快捷操作">
+          <RibbonQuickButton
+            label="保存"
+            icon={<IconSave />}
+            title="保存 (Ctrl+S)"
+            onClick={triggerSave}
+          />
+          {!isPlainMdDocument && (
+            <RibbonQuickButton
+              label="历史修改"
+              icon={<IconHistory />}
+              title="查看历史修改"
+              active={appView === "history"}
+              onClick={openHistoryPage}
+            />
+          )}
+        </div>
 
         <LayoutToggle
           mode={layoutMode}

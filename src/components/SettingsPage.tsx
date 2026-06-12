@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { message } from "@tauri-apps/plugin-dialog";
+import {
+  getDiagnosticLogDir,
+  openDiagnosticLogDir,
+  readDiagnosticLogTail,
+} from "../lib/diagnosticLog";
 import { testVaultGit } from "../lib/gitSync";
 import {
   DEFAULT_DOCUMENT_HISTORY_DEPTH,
@@ -10,27 +15,27 @@ import {
   MIN_HISTORY_DEPTH,
 } from "../lib/settings";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
 import type { GitSyncSettings } from "../types/settings";
 
-interface SettingsDialogProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
+export function SettingsPage() {
   const editorHistoryDepth = useSettingsStore((s) => s.editorHistoryDepth);
   const documentHistoryDepth = useSettingsStore((s) => s.documentHistoryDepth);
   const recordDeviceInfo = useSettingsStore((s) => s.recordDeviceInfo);
   const recordLocation = useSettingsStore((s) => s.recordLocation);
+  const markdownSingleLineBreaks = useSettingsStore((s) => s.markdownSingleLineBreaks);
   const gitSync = useSettingsStore((s) => s.gitSync);
   const applySettings = useSettingsStore((s) => s.applySettings);
   const vaultPath = useVaultStore((s) => s.vaultPath);
+  const enterEditor = useUiStore((s) => s.enterEditor);
+  const showWelcome = useUiStore((s) => s.showWelcome);
 
   const [editorDepth, setEditorDepth] = useState(String(DEFAULT_EDITOR_HISTORY_DEPTH));
   const [documentDepth, setDocumentDepth] = useState(String(DEFAULT_DOCUMENT_HISTORY_DEPTH));
   const [deviceEnabled, setDeviceEnabled] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  const [singleLineBreaksEnabled, setSingleLineBreaksEnabled] = useState(false);
   const [gitEnabled, setGitEnabled] = useState(false);
   const [remoteUrl, setRemoteUrl] = useState("");
   const [token, setToken] = useState("");
@@ -39,13 +44,31 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [authorEmail, setAuthorEmail] = useState("");
   const [commitTemplate, setCommitTemplate] = useState(DEFAULT_GIT_COMMIT_TEMPLATE);
   const [testingGit, setTestingGit] = useState(false);
+  const [savedHint, setSavedHint] = useState(false);
+  const [logDir, setLogDir] = useState("");
+  const [logPreview, setLogPreview] = useState("");
+  const [loadingLog, setLoadingLog] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    void getDiagnosticLogDir().then(setLogDir).catch(() => undefined);
+    void refreshLogPreview();
+  }, []);
+
+  const refreshLogPreview = async () => {
+    setLoadingLog(true);
+    try {
+      const tail = await readDiagnosticLogTail(60);
+      setLogPreview(tail || "（暂无日志，请先复现保存问题后再刷新）");
+    } finally {
+      setLoadingLog(false);
+    }
+  };
+  const resetForm = () => {
     setEditorDepth(String(editorHistoryDepth));
     setDocumentDepth(String(documentHistoryDepth));
     setDeviceEnabled(recordDeviceInfo);
     setLocationEnabled(recordLocation);
+    setSingleLineBreaksEnabled(markdownSingleLineBreaks);
     setGitEnabled(gitSync.enabled);
     setRemoteUrl(gitSync.remoteUrl);
     setToken(gitSync.token);
@@ -53,16 +76,19 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setAuthorName(gitSync.authorName);
     setAuthorEmail(gitSync.authorEmail);
     setCommitTemplate(gitSync.commitMessageTemplate || DEFAULT_GIT_COMMIT_TEMPLATE);
+    setSavedHint(false);
+  };
+
+  useEffect(() => {
+    resetForm();
   }, [
-    open,
     editorHistoryDepth,
     documentHistoryDepth,
     recordDeviceInfo,
     recordLocation,
+    markdownSingleLineBreaks,
     gitSync,
   ]);
-
-  if (!open) return null;
 
   const buildGitSettings = (): GitSyncSettings => ({
     enabled: gitEnabled,
@@ -84,8 +110,12 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         : DEFAULT_DOCUMENT_HISTORY_DEPTH,
       recordDeviceInfo: deviceEnabled,
       recordLocation: locationEnabled,
+      markdownSingleLineBreaks: singleLineBreaksEnabled,
       gitSync: buildGitSettings(),
-    }).then(onClose);
+    }).then(() => {
+      setSavedHint(true);
+      window.setTimeout(() => setSavedHint(false), 2000);
+    });
   };
 
   const handleTestGit = async () => {
@@ -117,49 +147,83 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   };
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div
-        className="dialog settings-dialog"
-        role="dialog"
-        aria-labelledby="settings-dialog-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3 id="settings-dialog-title">偏好设置</h3>
-        <p className="settings-dialog-desc">
-          配置编辑器行为、历史修改、文件属性记录，以及工作区 Git 同步（类似 Obsidian Git）。
-        </p>
+    <div className="settings-page">
+      <div className="settings-page-scroll">
+        <div className="settings-page-header">
+          <div>
+            <h1>偏好设置</h1>
+            <p>配置编辑器行为、Markdown 预览、历史修改、文件属性记录，以及工作区 Git 同步。</p>
+          </div>
+          <div className="settings-page-actions">
+            <button type="button" className="secondary" onClick={() => enterEditor()}>
+              返回编辑
+            </button>
+            <button type="button" className="secondary" onClick={showWelcome}>
+              开始页
+            </button>
+          </div>
+        </div>
 
-        <div className="settings-form">
-          <label className="settings-field">
-            <span className="settings-label">撤销 / 重做步数</span>
-            <span className="settings-hint">编辑器内可撤销的操作次数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}）</span>
-            <input
-              type="number"
-              min={MIN_HISTORY_DEPTH}
-              max={MAX_HISTORY_DEPTH}
-              value={editorDepth}
-              onChange={(event) => setEditorDepth(event.target.value)}
-            />
-          </label>
+        <div className="settings-page-body">
+        <section className="settings-card">
+          <h2>编辑器</h2>
+          <div className="settings-form">
+            <label className="settings-field">
+              <span className="settings-label">撤销 / 重做步数</span>
+              <span className="settings-hint">
+                编辑器内可撤销的操作次数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}）
+              </span>
+              <input
+                type="number"
+                min={MIN_HISTORY_DEPTH}
+                max={MAX_HISTORY_DEPTH}
+                value={editorDepth}
+                onChange={(event) => setEditorDepth(event.target.value)}
+              />
+            </label>
 
-          <label className="settings-field">
-            <span className="settings-label">历史修改步数</span>
-            <span className="settings-hint">
-              每个文档保留的保存差异记录条数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}，存入 versions.json）
-            </span>
-            <input
-              type="number"
-              min={MIN_HISTORY_DEPTH}
-              max={MAX_HISTORY_DEPTH}
-              value={documentDepth}
-              onChange={(event) => setDocumentDepth(event.target.value)}
-            />
-          </label>
+            <label className="settings-field">
+              <span className="settings-label">历史修改步数</span>
+              <span className="settings-hint">
+                每个文档保留的保存差异记录条数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}，存入 versions.json）
+              </span>
+              <input
+                type="number"
+                min={MIN_HISTORY_DEPTH}
+                max={MAX_HISTORY_DEPTH}
+                value={documentDepth}
+                onChange={(event) => setDocumentDepth(event.target.value)}
+              />
+            </label>
+          </div>
+        </section>
 
-          <div className="settings-section">
-            <span className="settings-label">文件属性记录</span>
-            <span className="settings-hint">保存文档时写入 manifest.json；关闭后不会记录对应字段。</span>
+        <section className="settings-card">
+          <h2>Markdown 预览</h2>
+          <p className="settings-card-desc">
+            控制分屏/预览模式下 Markdown 的渲染方式。标准 Markdown 规范要求<strong>空一行（两次换行）</strong>
+            才会开始新段落；单次换行在标准模式下会被合并为空格。
+          </p>
+          <div className="settings-form">
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={singleLineBreaksEnabled}
+                onChange={(event) => setSingleLineBreaksEnabled(event.target.checked)}
+              />
+              <span>单行换行即换行（非标准）</span>
+            </label>
+            <p className="settings-hint settings-hint-block">
+              开启后，按一次 Enter 产生的换行在预览中会显示为新的一行，类似部分即时通讯软件的排版。
+              关闭时遵循标准 Markdown 规则（推荐，与其他编辑器/平台兼容性更好）。
+            </p>
+          </div>
+        </section>
 
+        <section className="settings-card">
+          <h2>文件属性记录</h2>
+          <p className="settings-card-desc">保存文档时写入 manifest.json；关闭后不会记录对应字段。</p>
+          <div className="settings-form">
             <label className="settings-toggle">
               <input
                 type="checkbox"
@@ -178,13 +242,14 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
               <span>记录经纬度坐标（需浏览器/系统定位权限）</span>
             </label>
           </div>
+        </section>
 
-          <div className="settings-section">
-            <span className="settings-label">Git 同步</span>
-            <span className="settings-hint">
-              对当前工作区目录进行 Git 管理：打开文档前拉取远程更新，保存后在后台推送（关闭应用后仍会继续完成）。
-            </span>
-
+        <section className="settings-card">
+          <h2>Git 同步</h2>
+          <p className="settings-card-desc">
+            对当前工作区目录进行 Git 管理：打开文档前拉取远程更新，保存后在后台推送（关闭应用后仍会继续完成）。
+          </p>
+          <div className="settings-form">
             <label className="settings-toggle">
               <input
                 type="checkbox"
@@ -281,16 +346,40 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
               )}
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="dialog-actions">
-          <button type="button" onClick={handleSave}>
-            保存
-          </button>
-          <button type="button" className="secondary" onClick={onClose}>
-            取消
-          </button>
+        <section className="settings-section">
+          <h3>诊断日志</h3>
+          <p className="settings-hint">
+            保存异常或意外退出时，请打开日志文件夹，将当天日志（mdx-editor-YYYY-MM-DD.log）发给开发者。
+          </p>
+          {logDir && <p className="settings-hint settings-log-path">{logDir}</p>}
+          <div className="settings-git-actions">
+            <button type="button" className="secondary" onClick={() => void openDiagnosticLogDir()}>
+              打开日志文件夹
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={loadingLog}
+              onClick={() => void refreshLogPreview()}
+            >
+              {loadingLog ? "加载中…" : "刷新预览"}
+            </button>
+          </div>
+          {logPreview && <pre className="settings-log-preview">{logPreview}</pre>}
+        </section>
         </div>
+      </div>
+
+      <div className="settings-page-footer">
+        <button type="button" onClick={handleSave}>
+          保存设置
+        </button>
+        <button type="button" className="secondary" onClick={resetForm}>
+          重置更改
+        </button>
+        {savedHint && <span className="settings-saved-hint">已保存</span>}
       </div>
     </div>
   );

@@ -8,6 +8,11 @@ pub fn collect_asset_references(content: &str) -> HashSet<String> {
     let mut search_from = 0;
 
     while search_from < content.len() {
+        if !content.is_char_boundary(search_from) {
+            search_from += 1;
+            continue;
+        }
+
         let Some(rel_idx) = content[search_from..].find("asset/") else {
             break;
         };
@@ -36,6 +41,9 @@ pub fn collect_asset_references(content: &str) -> HashSet<String> {
         }
 
         search_from = path_start + end.max(1);
+        if search_from < content.len() && !content.is_char_boundary(search_from) {
+            search_from += 1;
+        }
     }
 
     refs
@@ -58,5 +66,12 @@ mod tests {
         let content = r#"<video controls src="asset/9478de95.mp4"></video>"#;
         let refs = collect_asset_references(content);
         assert!(refs.contains("asset/9478de95.mp4"));
+    }
+
+    #[test]
+    fn collects_asset_refs_with_chinese_content() {
+        let content = "> 引用测试\n![img](asset/d5f1cdde.png)\n";
+        let refs = collect_asset_references(content);
+        assert!(refs.contains("asset/d5f1cdde.png"));
     }
 }

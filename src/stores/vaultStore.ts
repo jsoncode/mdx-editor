@@ -12,6 +12,7 @@ import {
   saveVaultPath,
   scanVaultTree,
   suggestVaultDocumentName,
+  collectFolderPaths,
 } from "../lib/vault";
 import { pullVaultBeforeAccess } from "../lib/gitSyncWorkflow";
 import type { VaultTreeNode } from "../types/vault";
@@ -32,9 +33,11 @@ interface VaultStore {
   closeVault: () => Promise<void>;
   refreshTree: () => Promise<void>;
   createFolder: (name: string) => Promise<void>;
-  createDocument: (baseName?: string) => Promise<string | null>;
+  createDocument: (baseName?: string, format?: "mdx" | "md", folderRelative?: string) => Promise<string | null>;
   createWorkspace: (parentPath: string, name: string) => Promise<void>;
   expandToFile: (filePath: string) => void;
+  expandAllFolders: () => void;
+  collapseAllFolders: () => void;
 }
 
 function normalizeFolderPath(path: string): string {
@@ -142,14 +145,15 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
     set({ selectedFolder: normalizeFolderPath(relativePath) });
   },
 
-  createDocument: async (baseName = "未命名") => {
+  createDocument: async (baseName = "未命名", format: "mdx" | "md" = "mdx", folderRelative?: string) => {
     const { vaultPath, selectedFolder } = get();
     if (!vaultPath) return null;
 
+    const folder = normalizeFolderPath(folderRelative ?? selectedFolder);
     const relativePath = await suggestVaultDocumentName(
       vaultPath,
-      normalizeFolderPath(selectedFolder),
-      `${baseName}.mdx`,
+      folder,
+      `${baseName}.${format}`,
     );
     const absolutePath = await createVaultDocument(vaultPath, relativePath);
     await get().refreshTree();
@@ -188,5 +192,17 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
     }
     set({ expandedFolders: next });
     void saveExpandedFolders(Array.from(next));
+  },
+
+  expandAllFolders: () => {
+    const { tree } = get();
+    const next = new Set(collectFolderPaths(tree));
+    set({ expandedFolders: next });
+    void saveExpandedFolders(Array.from(next));
+  },
+
+  collapseAllFolders: () => {
+    set({ expandedFolders: new Set<string>() });
+    void saveExpandedFolders([]);
   },
 }));

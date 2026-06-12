@@ -13,6 +13,8 @@ export interface AppSettings {
   documentHistoryDepth: number;
   recordDeviceInfo: boolean;
   recordLocation: boolean;
+  /** 为 true 时，预览中单个换行即渲染为新行（非标准 Markdown） */
+  markdownSingleLineBreaks: boolean;
   gitSync: GitSyncSettings;
 }
 

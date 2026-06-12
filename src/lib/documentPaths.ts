@@ -22,6 +22,10 @@ export function defaultSavePath(basePath: string | null | undefined, extension: 
   return `${stem}.${extension}`;
 }
 
+export function mdPathToMdxPath(mdPath: string): string {
+  return mdPath.replace(/\.md$/i, ".mdx");
+}
+
 export const MARKDOWN_DOCUMENT_OPEN_FILTERS = [
   { name: "Markdown / MDX", extensions: ["md", "mdx"] },
   { name: "MDX 文档", extensions: ["mdx"] },

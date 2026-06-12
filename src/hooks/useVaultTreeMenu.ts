@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useState } from "react";
-import {
+import { mdPathToMdxPath, isPlainMdPath } from "../lib/documentPaths";import {
   deleteVaultFile,
   deleteVaultFolder,
   getRelativeVaultPath,
@@ -13,7 +13,7 @@ import {
 import { getFileName, removeRecentFile, addRecentFile } from "../lib/recentFiles";
 import { useDocumentStore } from "../stores/documentStore";
 import { useVaultStore } from "../stores/vaultStore";
-import type { VaultContextTarget, VaultItemInfo } from "../types/vault";
+import type { VaultContextTarget, VaultItemInfo, VaultItemTarget } from "../types/vault";
 
 export function useVaultTreeMenu() {
   const [contextMenu, setContextMenu] = useState<{
@@ -22,7 +22,7 @@ export function useVaultTreeMenu() {
     target: VaultContextTarget;
   } | null>(null);
   const [infoItem, setInfoItem] = useState<VaultItemInfo | null>(null);
-  const [renameTarget, setRenameTarget] = useState<VaultContextTarget | null>(null);
+  const [renameTarget, setRenameTarget] = useState<VaultItemTarget | null>(null);
 
   const vaultPath = useVaultStore((s) => s.vaultPath);
   const refreshTree = useVaultStore((s) => s.refreshTree);
@@ -47,8 +47,23 @@ export function useVaultTreeMenu() {
     [],
   );
 
+  const openWorkspaceContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      if (!vaultPath) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const folderRelative = useVaultStore.getState().selectedFolder;
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        target: { kind: "workspace", vaultPath, folderRelative },
+      });
+    },
+    [vaultPath],
+  );
+
   const showInfo = useCallback(
-    async (target: VaultContextTarget) => {
+    async (target: VaultItemTarget) => {
       if (!vaultPath) return;
       try {
         const info = await getVaultItemInfo(vaultPath, target.path);
@@ -152,7 +167,7 @@ export function useVaultTreeMenu() {
   );
 
   const submitRename = useCallback(
-    async (target: VaultContextTarget, newName: string) => {
+    async (target: VaultItemTarget, newName: string) => {
       if (!vaultPath) return;
 
       const trimmed = newName.trim();
@@ -196,10 +211,13 @@ export function useVaultTreeMenu() {
   );
 
   const createDocumentInFolder = useCallback(
-    async (target: Extract<VaultContextTarget, { kind: "folder" }>) => {
+    async (
+      target: Extract<VaultContextTarget, { kind: "folder" }>,
+      format: "mdx" | "md" = "mdx",
+    ) => {
       setSelectedFolder(target.relativePath);
       try {
-        const path = await createDocument();
+        const path = await createDocument("未命名", format, target.relativePath);
         if (!path) return;
         return path;
       } catch (error) {
@@ -208,6 +226,80 @@ export function useVaultTreeMenu() {
       }
     },
     [createDocument, setSelectedFolder],
+  );
+
+  const createDocumentInWorkspace = useCallback(
+    async (folderRelative: string, format: "mdx" | "md") => {
+      setSelectedFolder(folderRelative);
+      try {
+        const path = await createDocument("未命名", format, folderRelative);
+        if (!path) return;
+        return path;
+      } catch (error) {
+        await message(String(error), { title: "创建文档失败", kind: "error" });
+        return null;
+      }
+    },
+    [createDocument, setSelectedFolder],
+  );
+
+  const convertMdToMdx = useCallback(
+    async (target: Extract<VaultContextTarget, { kind: "file" }>) => {
+      if (!isPlainMdPath(target.path)) return;
+
+      const outputPath = mdPathToMdxPath(target.path);
+
+      if (filePath === target.path && workspaceId) {
+        const confirmed = await ask(
+          "将当前 Markdown 文档转换为 MDX，本地引用的图片与附件会复制到 asset 并打包进 MDX。是否继续？",
+          {
+            title: "转换为 MDX",
+            kind: "info",
+            okLabel: "转换并保存",
+            cancelLabel: "取消",
+          },
+        );
+        if (!confirmed) return;
+
+        try {
+          const saveDocument = useDocumentStore.getState().saveDocument;
+          const recent = await saveDocument(outputPath);
+          if (recent) setRecentFiles(recent);
+          await refreshTree();
+        } catch (error) {
+          await message(String(error), { title: "转换失败", kind: "error" });
+        }
+        return;
+      }
+
+      const confirmed = await ask(
+        `将「${target.name}」转换为 MDX 格式？\n\n会扫描正文中的本地图片、附件等引用，复制到 asset 并打包进 MDX 文件。`,
+        {
+          title: "转换为 MDX",
+          kind: "info",
+          okLabel: "转换",
+          cancelLabel: "取消",
+        },
+      );
+      if (!confirmed) return;
+
+      try {
+        const resultPath = await invoke<string>("convert_md_file_to_mdx", {
+          mdPath: target.path,
+          outputPath: outputPath,
+        });
+        const recent = await addRecentFile(resultPath);
+        setRecentFiles(recent);
+        await refreshTree();
+        await message(`已转换为 ${resultPath.split(/[/\\]/).pop()}`, {
+          title: "转换完成",
+          kind: "info",
+        });
+      } catch (error) {
+        await message(String(error), { title: "转换失败", kind: "error" });
+      }
+    },
+    [filePath, workspaceId, refreshTree, setRecentFiles],
   );
 
   const buildFileContextTarget = useCallback(
@@ -241,6 +333,7 @@ export function useVaultTreeMenu() {
     renameTarget,
     closeContextMenu,
     openContextMenu,
+    openWorkspaceContextMenu,
     showInfo,
     copyPath,
     revealInExplorer,
@@ -248,6 +341,8 @@ export function useVaultTreeMenu() {
     deleteFolder,
     submitRename,
     createDocumentInFolder,
+    createDocumentInWorkspace,
+    convertMdToMdx,
     setInfoItem,
     setRenameTarget,
     buildFileContextTarget,

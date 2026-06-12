@@ -5,14 +5,16 @@ mod error;
 mod git_sync;
 mod launch;
 mod manifest;
-mod manifest_io;
+mod md_import;
 mod mdx;
 mod vault;
 mod versions;
+mod diagnostics;
+mod webview;
 mod workspace;
 
 use launch::{collect_mdx_paths_from_args, handle_open_files, LaunchState};
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use tauri::RunEvent;
 use workspace::WorkspaceManager;
@@ -20,6 +22,11 @@ use workspace::WorkspaceManager;
 #[tauri::command]
 fn take_launch_file(state: tauri::State<'_, LaunchState>) -> Option<String> {
     state.take_pending()
+}
+
+#[tauri::command]
+fn disable_webview_accelerators(window: tauri::WebviewWindow) {
+    webview::disable_browser_accelerator_keys(&window);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +39,8 @@ pub fn run() {
         }
         std::process::exit(0);
     }
+
+    diagnostics::install_panic_hook();
 
     let mut builder = tauri::Builder::default();
 
@@ -51,8 +60,25 @@ pub fn run() {
         .manage(WorkspaceManager::new())
         .manage(LaunchState::new())
         .setup(|app| {
+            let _log_dir = diagnostics::init(app.handle());
+
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
+                webview::disable_browser_accelerator_keys(&window);
+                window.on_window_event(|event| match event {
+                    WindowEvent::CloseRequested { .. } => {
+                        diagnostics::log(
+                            "rust",
+                            "info",
+                            "window_close_requested",
+                            "native CloseRequested event",
+                        );
+                    }
+                    WindowEvent::Destroyed => {
+                        diagnostics::log("rust", "info", "window_destroyed", "");
+                    }
+                    _ => {}
+                });
             }
 
             let paths = collect_mdx_paths_from_args(std::env::args().skip(1));
@@ -64,10 +90,16 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             take_launch_file,
+            disable_webview_accelerators,
+            diagnostics::diagnostic_log,
+            diagnostics::get_diagnostic_log_dir,
+            diagnostics::read_diagnostic_log_tail,
+            diagnostics::open_diagnostic_log_dir,
             commands::create_document,
             commands::open_document,
             commands::update_document_content,
             commands::save_document,
+            commands::convert_md_file_to_mdx,
             commands::autosave_document,
             commands::close_document,
             commands::get_document_manifest,

@@ -157,30 +157,57 @@ pub fn create_vault_document(vault_path: &str, relative_path: &str) -> AppResult
         fs::create_dir_all(parent)?;
     }
 
-    create_empty_mdx(&target)?;
+    let is_plain_md = target
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
+
+    if is_plain_md {
+        fs::write(&target, "")?;
+    } else {
+        create_empty_mdx(&target)?;
+    }
+
     Ok(target.to_string_lossy().to_string())
+}
+
+fn split_document_base_name(base_name: &str) -> (String, String) {
+    let lower = base_name.to_lowercase();
+    if lower.ends_with(".mdx") {
+        (
+            base_name[..base_name.len().saturating_sub(4)].to_string(),
+            ".mdx".to_string(),
+        )
+    } else if lower.ends_with(".md") {
+        (
+            base_name[..base_name.len().saturating_sub(3)].to_string(),
+            ".md".to_string(),
+        )
+    } else {
+        (base_name.to_string(), ".mdx".to_string())
+    }
 }
 
 pub fn unique_document_name(vault_path: &str, folder_relative: &str, base_name: &str) -> AppResult<String> {
     let root = PathBuf::from(vault_path);
-    let stem = base_name.trim_end_matches(".mdx");
+    let (stem, extension) = split_document_base_name(base_name);
     let folder = if folder_relative.is_empty() {
         root.clone()
     } else {
         resolve_vault_child(&root, folder_relative)?
     };
 
-    let first = folder.join(format!("{stem}.mdx"));
+    let first = folder.join(format!("{stem}{extension}"));
     if !first.exists() {
         return Ok(if folder_relative.is_empty() {
-            format!("{stem}.mdx")
+            format!("{stem}{extension}")
         } else {
-            format!("{folder_relative}/{stem}.mdx").replace('\\', "/")
+            format!("{folder_relative}/{stem}{extension}").replace('\\', "/")
         });
     }
 
     for index in 2..=999 {
-        let candidate = folder.join(format!("{stem} {index}.mdx"));
+        let candidate = folder.join(format!("{stem} {index}{extension}"));
         if !candidate.exists() {
             let relative = candidate
                 .strip_prefix(&root)
