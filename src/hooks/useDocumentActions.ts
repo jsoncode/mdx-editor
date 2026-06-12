@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { AUDIO_INSERT_EXTENSIONS } from "../lib/media";
 import { buildExportHtml } from "../lib/export";
 import {
   defaultSavePath,
@@ -179,7 +180,7 @@ export function useDocumentActions(previewHtml: string) {
     await insertAssetFromDialog("插入音频", [
       {
         name: "音频",
-        extensions: ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"],
+        extensions: AUDIO_INSERT_EXTENSIONS,
       },
     ]);
   };
@@ -188,7 +189,17 @@ export function useDocumentActions(previewHtml: string) {
     await insertAssetFromDialog("插入音视频", [
       {
         name: "音视频",
-        extensions: ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "flv", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"],
+        extensions: [
+          "mp4",
+          "webm",
+          "mov",
+          "avi",
+          "mkv",
+          "m4v",
+          "wmv",
+          "flv",
+          ...AUDIO_INSERT_EXTENSIONS,
+        ],
       },
     ]);
   };

@@ -4,15 +4,17 @@ import type { ExtraProps } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { buildRemarkPlugins } from "../lib/markdownPlugins";
 import { openAttachmentWithConfirm } from "../lib/attachment";
-import { resolveAssetUrl } from "../lib/assetResolver";
+import { resolveAssetUrl, resolveMediaPreviewUrl } from "../lib/assetResolver";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
+  audioMimeFallbacks,
   extensionFromPath,
   fileNameFromPath,
   isAttachmentPath,
   isAudioExtension,
   isVideoExtension,
   normalizeAssetPath,
+  videoMimeType,
 } from "../lib/media";
 
 interface MarkdownPreviewProps {
@@ -34,17 +36,79 @@ function flattenText(children: React.ReactNode): string {
 }
 
 function useResolvedAssetUrl(workspaceId: string | null, src?: string) {
-  const [resolvedSrc, setResolvedSrc] = useState(src ?? "");
+  const [resolvedSrc, setResolvedSrc] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!src) {
       setResolvedSrc("");
+      setReady(true);
       return;
     }
-    void resolveAssetUrl(workspaceId, src).then(setResolvedSrc);
+
+    let cancelled = false;
+    setReady(false);
+    void resolveAssetUrl(workspaceId, src).then((url) => {
+      if (cancelled) return;
+      setResolvedSrc(url);
+      setReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [src, workspaceId]);
 
-  return resolvedSrc;
+  return { resolvedSrc, ready };
+}
+
+function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
+  const ffmpegPath = useSettingsStore((s) => s.ffmpegPath);
+  const [resolvedSrc, setResolvedSrc] = useState("");
+  const [ready, setReady] = useState(false);
+  const [transcoding, setTranscoding] = useState(false);
+
+  useEffect(() => {
+    if (!src) {
+      setResolvedSrc("");
+      setReady(true);
+      setTranscoding(false);
+      return;
+    }
+
+    let cancelled = false;
+    setReady(false);
+    setTranscoding(true);
+
+    void resolveMediaPreviewUrl(workspaceId, src, ffmpegPath).then((url) => {
+      if (cancelled) return;
+      setResolvedSrc(url);
+      setReady(true);
+      setTranscoding(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src, workspaceId, ffmpegPath]);
+
+  return { resolvedSrc, ready, transcoding };
+}
+
+function previewMimeFromPath(
+  playbackPath: string,
+  kind: "audio" | "video",
+  sourceExt: string,
+): string | undefined {
+  const previewExt = extensionFromPath(playbackPath);
+  if (kind === "video") {
+    return videoMimeType(previewExt) ?? "video/mp4";
+  }
+  if (previewExt === "m4a" || previewExt === "mp4") {
+    return "audio/mp4";
+  }
+  const fallbacks = audioMimeFallbacks(sourceExt);
+  return fallbacks[0];
 }
 
 function AssetImage({
@@ -56,8 +120,8 @@ function AssetImage({
   alt?: string;
   workspaceId: string | null;
 }) {
-  const resolvedSrc = useResolvedAssetUrl(workspaceId, src);
-  return <img src={resolvedSrc} alt={alt ?? ""} />;
+  const { resolvedSrc } = useResolvedAssetUrl(workspaceId, src);
+  return <img src={resolvedSrc || src} alt={alt ?? ""} />;
 }
 
 function AssetVideo({
@@ -67,9 +131,29 @@ function AssetVideo({
   src?: string;
   workspaceId: string | null;
 }) {
-  const resolvedSrc = useResolvedAssetUrl(workspaceId, src);
-  if (!resolvedSrc) return null;
-  return <video controls src={resolvedSrc} style={{ maxWidth: "100%" }} />;
+  const { resolvedSrc, ready, transcoding } = useResolvedMediaUrl(workspaceId, src);
+  if (!src) return null;
+
+  const normalized = normalizeAssetPath(src);
+  const sourceExt = extensionFromPath(normalized);
+  const playbackSrc = ready ? resolvedSrc : "";
+  const mime = playbackSrc
+    ? previewMimeFromPath(playbackSrc, "video", sourceExt)
+    : videoMimeType(sourceExt);
+
+  if (transcoding || !playbackSrc) {
+    return (
+      <p className="media-preview-status" aria-live="polite">
+        正在准备视频…
+      </p>
+    );
+  }
+
+  return (
+    <video controls className="preview-video" preload="metadata" style={{ maxWidth: "100%" }}>
+      <source src={playbackSrc} type={mime} />
+    </video>
+  );
 }
 
 function AssetAudio({
@@ -79,9 +163,38 @@ function AssetAudio({
   src?: string;
   workspaceId: string | null;
 }) {
-  const resolvedSrc = useResolvedAssetUrl(workspaceId, src);
-  if (!resolvedSrc) return null;
-  return <audio controls src={resolvedSrc} />;
+  const { resolvedSrc, ready, transcoding } = useResolvedMediaUrl(workspaceId, src);
+  if (!src) return null;
+
+  const normalized = normalizeAssetPath(src);
+  const sourceExt = extensionFromPath(normalized);
+  const playbackSrc = ready ? resolvedSrc : "";
+  const mimeTypes = playbackSrc
+    ? [previewMimeFromPath(playbackSrc, "audio", sourceExt)].filter(
+        (value): value is string => Boolean(value),
+      )
+    : audioMimeFallbacks(sourceExt);
+
+  if (transcoding || !playbackSrc) {
+    return (
+      <p className="media-preview-status" aria-live="polite">
+        正在准备音频…
+      </p>
+    );
+  }
+
+  return (
+    <audio
+      controls
+      className="preview-audio"
+      preload="metadata"
+      src={playbackSrc}
+    >
+      {mimeTypes.map((type) => (
+        <source key={type} src={playbackSrc} type={type} />
+      ))}
+    </audio>
+  );
 }
 
 function AttachmentLink({
@@ -119,7 +232,7 @@ function AssetLink({
   children?: React.ReactNode;
   workspaceId: string | null;
 }) {
-  const resolvedHref = useResolvedAssetUrl(workspaceId, href);
+  const { resolvedSrc } = useResolvedAssetUrl(workspaceId, href);
 
   if (!href) {
     return <a>{children}</a>;
@@ -145,7 +258,7 @@ function AssetLink({
   }
 
   return (
-    <a href={resolvedHref} target="_blank" rel="noreferrer">
+    <a href={resolvedSrc || href} target="_blank" rel="noreferrer">
       {children}
     </a>
   );

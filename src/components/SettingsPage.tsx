@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { message } from "@tauri-apps/plugin-dialog";
+import { message, open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import {
   getDiagnosticLogDir,
   openDiagnosticLogDir,
@@ -25,6 +26,7 @@ export function SettingsPage() {
   const recordDeviceInfo = useSettingsStore((s) => s.recordDeviceInfo);
   const recordLocation = useSettingsStore((s) => s.recordLocation);
   const markdownSingleLineBreaks = useSettingsStore((s) => s.markdownSingleLineBreaks);
+  const ffmpegPath = useSettingsStore((s) => s.ffmpegPath);
   const gitSync = useSettingsStore((s) => s.gitSync);
   const applySettings = useSettingsStore((s) => s.applySettings);
   const vaultPath = useVaultStore((s) => s.vaultPath);
@@ -36,6 +38,8 @@ export function SettingsPage() {
   const [deviceEnabled, setDeviceEnabled] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [singleLineBreaksEnabled, setSingleLineBreaksEnabled] = useState(false);
+  const [ffmpegPathInput, setFfmpegPathInput] = useState("");
+  const [testingFfmpeg, setTestingFfmpeg] = useState(false);
   const [gitEnabled, setGitEnabled] = useState(false);
   const [remoteUrl, setRemoteUrl] = useState("");
   const [token, setToken] = useState("");
@@ -69,6 +73,7 @@ export function SettingsPage() {
     setDeviceEnabled(recordDeviceInfo);
     setLocationEnabled(recordLocation);
     setSingleLineBreaksEnabled(markdownSingleLineBreaks);
+    setFfmpegPathInput(ffmpegPath);
     setGitEnabled(gitSync.enabled);
     setRemoteUrl(gitSync.remoteUrl);
     setToken(gitSync.token);
@@ -87,6 +92,7 @@ export function SettingsPage() {
     recordDeviceInfo,
     recordLocation,
     markdownSingleLineBreaks,
+    ffmpegPath,
     gitSync,
   ]);
 
@@ -111,11 +117,38 @@ export function SettingsPage() {
       recordDeviceInfo: deviceEnabled,
       recordLocation: locationEnabled,
       markdownSingleLineBreaks: singleLineBreaksEnabled,
+      ffmpegPath: ffmpegPathInput,
       gitSync: buildGitSettings(),
     }).then(() => {
       setSavedHint(true);
       window.setTimeout(() => setSavedHint(false), 2000);
     });
+  };
+
+  const handleBrowseFfmpeg = async () => {
+    const selected = await open({
+      title: "选择 FFmpeg 可执行文件",
+      multiple: false,
+      directory: false,
+    });
+    if (typeof selected === "string") {
+      setFfmpegPathInput(selected);
+    }
+  };
+
+  const handleTestFfmpeg = async () => {
+    setTestingFfmpeg(true);
+    try {
+      const trimmed = ffmpegPathInput.trim();
+      const result = await invoke<string>("test_ffmpeg", {
+        ffmpegPath: trimmed || null,
+      });
+      await message(result, { title: "FFmpeg 测试", kind: "info" });
+    } catch (error) {
+      await message(String(error), { title: "FFmpeg 不可用", kind: "error" });
+    } finally {
+      setTestingFfmpeg(false);
+    }
   };
 
   const handleTestGit = async () => {
@@ -241,6 +274,42 @@ export function SettingsPage() {
               />
               <span>记录经纬度坐标（需浏览器/系统定位权限）</span>
             </label>
+          </div>
+        </section>
+
+        <section className="settings-card">
+          <h2>媒体预览</h2>
+          <p className="settings-card-desc">
+            预览 WMA、WMV、AVI 等浏览器不支持的格式时，需要 FFmpeg 转码。默认使用系统 PATH 中的
+            FFmpeg；也可在此指定可执行文件路径。
+          </p>
+          <div className="settings-form">
+            <label className="settings-field">
+              <span className="settings-label">FFmpeg 路径</span>
+              <span className="settings-hint">
+                留空则依次尝试：内置 FFmpeg（若安装包已包含）→ 系统 PATH
+              </span>
+              <input
+                className="settings-input-wide"
+                type="text"
+                value={ffmpegPathInput}
+                onChange={(event) => setFfmpegPathInput(event.target.value)}
+                placeholder="例如 D:\Program\ffmpeg\bin\ffmpeg.exe"
+              />
+            </label>
+            <div className="settings-git-actions">
+              <button type="button" className="secondary" onClick={() => void handleBrowseFfmpeg()}>
+                浏览…
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={testingFfmpeg}
+                onClick={() => void handleTestFfmpeg()}
+              >
+                {testingFfmpeg ? "测试中…" : "测试 FFmpeg"}
+              </button>
+            </div>
           </div>
         </section>
 

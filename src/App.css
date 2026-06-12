@@ -1271,10 +1271,29 @@ body,
 }
 
 .markdown-preview img,
-.markdown-preview video,
-.markdown-preview audio {
+.markdown-preview video {
   max-width: 100%;
   height: auto;
+}
+
+.markdown-preview audio,
+.markdown-preview .preview-audio {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  min-height: 40px;
+  margin: 0.5rem 0;
+}
+
+.markdown-preview .preview-video {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.markdown-preview .media-preview-status {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
 }
 
 .attachment-link {

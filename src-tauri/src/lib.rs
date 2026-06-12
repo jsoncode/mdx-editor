@@ -7,6 +7,7 @@ mod launch;
 mod manifest;
 mod md_import;
 mod mdx;
+mod media_preview;
 mod vault;
 mod versions;
 mod diagnostics;
@@ -56,6 +57,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(WorkspaceManager::new())
         .manage(LaunchState::new())
@@ -123,6 +125,9 @@ pub fn run() {
             commands::read_clipboard_file_paths,
             commands::list_assets,
             commands::get_asset_absolute_path,
+            commands::resolve_media_preview,
+            commands::ffmpeg_available,
+            commands::test_ffmpeg,
             commands::export_markdown,
             commands::export_html,
             commands::git_sync_pull,

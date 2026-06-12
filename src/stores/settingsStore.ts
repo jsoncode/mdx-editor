@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { clearAssetCache } from "../lib/assetResolver";
 import {
   clampHistoryDepth,
   DEFAULT_DOCUMENT_HISTORY_DEPTH,
@@ -15,12 +16,13 @@ interface SettingsStore extends AppSettings {
   applySettings: (settings: AppSettings) => Promise<void>;
 }
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
+export const useSettingsStore = create<SettingsStore>((set, get) => ({
   editorHistoryDepth: DEFAULT_EDITOR_HISTORY_DEPTH,
   documentHistoryDepth: DEFAULT_DOCUMENT_HISTORY_DEPTH,
   recordDeviceInfo: false,
   recordLocation: false,
   markdownSingleLineBreaks: false,
+  ffmpegPath: "",
   gitSync: DEFAULT_GIT_SYNC,
   loaded: false,
 
@@ -30,12 +32,14 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   },
 
   applySettings: async (settings) => {
+    const previousFfmpegPath = get().ffmpegPath;
     const next: AppSettings = {
       editorHistoryDepth: clampHistoryDepth(settings.editorHistoryDepth),
       documentHistoryDepth: clampHistoryDepth(settings.documentHistoryDepth),
       recordDeviceInfo: settings.recordDeviceInfo,
       recordLocation: settings.recordLocation,
       markdownSingleLineBreaks: settings.markdownSingleLineBreaks,
+      ffmpegPath: settings.ffmpegPath.trim(),
       gitSync: {
         ...DEFAULT_GIT_SYNC,
         ...settings.gitSync,
@@ -49,6 +53,9 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       },
     };
     await saveAppSettings(next);
+    if (next.ffmpegPath !== previousFfmpegPath) {
+      clearAssetCache();
+    }
     set(next);
   },
 }));

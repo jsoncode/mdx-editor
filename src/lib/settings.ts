@@ -14,6 +14,7 @@ const GIT_AUTHOR_NAME_KEY = "git_author_name";
 const GIT_AUTHOR_EMAIL_KEY = "git_author_email";
 const GIT_COMMIT_TEMPLATE_KEY = "git_commit_template";
 const MARKDOWN_SINGLE_LINE_BREAKS_KEY = "markdown_single_line_breaks";
+const FFMPEG_PATH_KEY = "ffmpeg_path";
 
 export const DEFAULT_EDITOR_HISTORY_DEPTH = 50;
 export const DEFAULT_DOCUMENT_HISTORY_DEPTH = 50;
@@ -76,6 +77,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
     recordDeviceInfo: recordDevice ?? false,
     recordLocation: recordLocation ?? false,
     markdownSingleLineBreaks: (await store.get<boolean>(MARKDOWN_SINGLE_LINE_BREAKS_KEY)) ?? false,
+    ffmpegPath: (await store.get<string>(FFMPEG_PATH_KEY))?.trim() ?? "",
     gitSync,
   };
 }
@@ -87,6 +89,7 @@ export async function saveAppSettings(settings: AppSettings): Promise<void> {
   await store.set(RECORD_DEVICE_KEY, settings.recordDeviceInfo);
   await store.set(RECORD_LOCATION_KEY, settings.recordLocation);
   await store.set(MARKDOWN_SINGLE_LINE_BREAKS_KEY, settings.markdownSingleLineBreaks);
+  await store.set(FFMPEG_PATH_KEY, settings.ffmpegPath.trim());
   await store.set(GIT_ENABLED_KEY, settings.gitSync.enabled);
   await store.set(GIT_REMOTE_URL_KEY, settings.gitSync.remoteUrl.trim());
   await store.set(GIT_TOKEN_KEY, settings.gitSync.token);

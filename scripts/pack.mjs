@@ -3,18 +3,21 @@
  * MDX Editor 打包脚本
  *
  * 用法:
- *   npm run pack              交互式选择打包类型
- *   npm run pack -- exe       仅编译绿色版 exe
- *   npm run pack -- nsis      仅 NSIS 安装包
- *   npm run pack -- msi       仅 MSI 安装包
- *   npm run pack -- all       全部（NSIS + MSI，含 exe）
+ *   npm run pack                      交互式选择（默认不内置 FFmpeg）
+ *   npm run pack -- exe               仅编译绿色版 exe
+ *   npm run pack -- nsis              仅 NSIS 安装包
+ *   npm run pack -- msi               仅 MSI 安装包
+ *   npm run pack -- all               全部（NSIS + MSI，含 exe）
+ *   npm run pack -- --with-ffmpeg     内置 FFmpeg 后再打包（可与其他类型组合）
+ *   npm run pack:ffmpeg               同上（内置 FFmpeg + 交互式选择）
  */
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { isFfmpegBundled, readTauriConfig, setFfmpegBundle, writeTauriConfig } from "./ffmpeg-bundle-config.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -53,15 +56,25 @@ function printHelp() {
   console.log(`
 MDX Editor 打包类型:
 
-  npm run pack              交互式选择
-  npm run pack -- exe       绿色版 exe（不生成安装包）
-  npm run pack -- nsis      NSIS 安装程序
-  npm run pack -- msi       MSI 安装包
-  npm run pack -- all       NSIS + MSI
+  npm run pack                      交互式选择（默认不内置 FFmpeg）
+  npm run pack -- exe               绿色版 exe（不生成安装包）
+  npm run pack -- nsis              NSIS 安装程序
+  npm run pack -- msi               MSI 安装包
+  npm run pack -- all               NSIS + MSI
+  npm run pack -- --with-ffmpeg     打包时内置 FFmpeg
+  npm run pack:ffmpeg               内置 FFmpeg + 交互式选择
 
 快捷命令:
   npm run pack:exe | pack:nsis | pack:msi | pack:all
+  npm run pack:ffmpeg:exe | pack:ffmpeg:all  等
 `);
+}
+
+function parseArgs(argv) {
+  const withFfmpeg = argv.includes("--with-ffmpeg");
+  const filtered = argv.filter((arg) => arg !== "--with-ffmpeg");
+  const typeArg = filtered[2];
+  return { withFfmpeg, typeArg };
 }
 
 function resolveType(raw) {
@@ -96,15 +109,31 @@ async function promptType() {
   }
 }
 
-function runTauriBuild(type) {
+function fetchFfmpeg() {
+  console.log("\n>>> 准备内置 FFmpeg sidecar…\n");
+  const result = spawnSync("node", ["scripts/fetch-ffmpeg.mjs"], {
+    cwd: rootDir,
+    stdio: "inherit",
+    shell: true,
+  });
+  if (result.status !== 0) {
+    throw new Error("下载 FFmpeg 失败，无法继续内置打包");
+  }
+}
+
+function runTauriBuild(type, withFfmpeg) {
   const pack = PACK_TYPES[type];
-  console.log(`\n>>> 开始打包: ${pack.label}\n`);
+  console.log(`\n>>> 开始打包: ${pack.label}${withFfmpeg ? "（含 FFmpeg）" : ""}\n`);
 
   return new Promise((resolve, reject) => {
     const child = spawn("npm", ["run", "tauri", "--", ...pack.tauriArgs], {
       cwd: rootDir,
       stdio: "inherit",
       shell: true,
+      env: {
+        ...process.env,
+        TAURI_BUNDLE_FFMPEG: withFfmpeg ? "1" : "0",
+      },
     });
 
     child.on("error", reject);
@@ -120,13 +149,34 @@ function runTauriBuild(type) {
   });
 }
 
-const cliArg = process.argv[2];
-const resolved = resolveType(cliArg);
+async function main() {
+  const { withFfmpeg, typeArg } = parseArgs(process.argv);
+  const resolved = resolveType(typeArg);
 
-if (resolved === "help") {
-  printHelp();
-  process.exit(0);
+  if (resolved === "help") {
+    printHelp();
+    process.exit(0);
+  }
+
+  const selectedType = resolved ?? (await promptType());
+  const configBackup = readTauriConfig();
+  const hadBundled = isFfmpegBundled(configBackup);
+
+  try {
+    if (withFfmpeg) {
+      fetchFfmpeg();
+      setFfmpegBundle(true);
+    } else {
+      setFfmpegBundle(false);
+    }
+
+    await runTauriBuild(selectedType, withFfmpeg);
+  } finally {
+    writeTauriConfig(configBackup);
+    if (withFfmpeg && !hadBundled) {
+      console.log(">>> 已恢复 tauri.conf.json（默认不内置 FFmpeg）\n");
+    }
+  }
 }
 
-const selectedType = resolved ?? (await promptType());
-await runTauriBuild(selectedType);
+await main();

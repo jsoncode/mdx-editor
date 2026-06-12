@@ -8,11 +8,17 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "fetch:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
     "pack": "node scripts/pack.mjs",
-    "pack:exe": "tauri build --no-bundle",
-    "pack:nsis": "tauri build --bundles nsis",
-    "pack:msi": "tauri build --bundles msi",
-    "pack:all": "tauri build"
+    "pack:ffmpeg": "node scripts/pack.mjs --with-ffmpeg",
+    "pack:exe": "node scripts/pack.mjs exe",
+    "pack:nsis": "node scripts/pack.mjs nsis",
+    "pack:msi": "node scripts/pack.mjs msi",
+    "pack:all": "node scripts/pack.mjs all",
+    "pack:ffmpeg:exe": "node scripts/pack.mjs --with-ffmpeg exe",
+    "pack:ffmpeg:nsis": "node scripts/pack.mjs --with-ffmpeg nsis",
+    "pack:ffmpeg:msi": "node scripts/pack.mjs --with-ffmpeg msi",
+    "pack:ffmpeg:all": "node scripts/pack.mjs --with-ffmpeg all"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

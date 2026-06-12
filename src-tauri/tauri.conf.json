@@ -24,13 +24,18 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "shortDescription": "MDX document editor",
     "longDescription": "A single-file MDX document editor based on Markdown, with media embedding, split preview, and export.",
     "icon": [
@@ -45,7 +50,10 @@
     },
     "windows": {
       "wix": {
-        "language": ["en-US", "zh-CN"]
+        "language": [
+          "en-US",
+          "zh-CN"
+        ]
       },
       "nsis": {
         "installerHooks": "windows/installer-hooks.nsh",
@@ -64,7 +72,9 @@
     },
     "fileAssociations": [
       {
-        "ext": ["mdx"],
+        "ext": [
+          "mdx"
+        ],
         "name": "MDX Document",
         "description": "MDX packaged markdown document",
         "mimeType": "application/x-mdx",

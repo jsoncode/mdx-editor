@@ -245,11 +245,17 @@ pub fn is_image_ext(ext: &str) -> bool {
 }
 
 pub fn is_video_ext(ext: &str) -> bool {
-    matches!(ext, "mp4" | "webm" | "mov" | "avi" | "mkv")
+    matches!(
+        ext,
+        "mp4" | "webm" | "mov" | "avi" | "mkv" | "m4v" | "wmv" | "flv" | "mpg" | "mpeg" | "3gp" | "ts"
+    )
 }
 
 pub fn is_audio_ext(ext: &str) -> bool {
-    matches!(ext, "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a")
+    matches!(
+        ext,
+        "mp3" | "wav" | "ogg" | "oga" | "opus" | "flac" | "aac" | "m4a" | "weba" | "aiff" | "aif" | "wma"
+    )
 }
 
 fn escape_markdown_link_text(text: &str) -> String {
@@ -269,9 +275,9 @@ pub fn markdown_snippet_for_asset(
     if is_image_ext(ext) {
         format!("![{label}]({relative_path})")
     } else if is_video_ext(ext) {
-        format!("[{label}]({relative_path})")
+        format!("<video controls src=\"{relative_path}\"></video>")
     } else if is_audio_ext(ext) {
-        format!("[{label}]({relative_path})")
+        format!("<audio controls src=\"{relative_path}\"></audio>")
     } else {
         format!("[📎 {label}]({relative_path})")
     }

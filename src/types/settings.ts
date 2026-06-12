@@ -15,6 +15,8 @@ export interface AppSettings {
   recordLocation: boolean;
   /** 为 true 时，预览中单个换行即渲染为新行（非标准 Markdown） */
   markdownSingleLineBreaks: boolean;
+  /** 自定义 FFmpeg 可执行文件路径；留空则使用内置 sidecar 或系统 PATH */
+  ffmpegPath: string;
   gitSync: GitSyncSettings;
 }
 

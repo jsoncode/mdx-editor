@@ -37,6 +37,9 @@ Desktop.ini
 
 # Tauri generated (local build artifacts)
 src-tauri/gen/
+src-tauri/binaries/ffmpeg*
+src-tauri/binaries/.ffmpeg-extract/
+src-tauri/binaries/ffmpeg-download.zip
 
 # Local / temp
 *.local
