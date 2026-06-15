@@ -4,6 +4,33 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = path.join(rootDir, "src-tauri", "tauri.conf.json");
+const binariesDir = path.join(rootDir, "src-tauri", "binaries");
+
+/** @returns {string} */
+export function targetTriple() {
+  if (process.env.TAURI_ENV_TARGET_TRIPLE) {
+    return process.env.TAURI_ENV_TARGET_TRIPLE;
+  }
+  if (process.platform === "win32") return "x86_64-pc-windows-msvc";
+  if (process.platform === "darwin") {
+    return process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
+  }
+  return "x86_64-unknown-linux-gnu";
+}
+
+/** @returns {string} */
+export function ffmpegSidecarFileName(triple = targetTriple()) {
+  return triple.includes("windows") ? `ffmpeg-${triple}.exe` : `ffmpeg-${triple}`;
+}
+
+/** @returns {string} */
+export function ffmpegSidecarPath(triple = targetTriple()) {
+  return path.join(binariesDir, ffmpegSidecarFileName(triple));
+}
+
+export function isFfmpegSidecarReady(triple = targetTriple()) {
+  return fs.existsSync(ffmpegSidecarPath(triple));
+}
 
 export function readTauriConfig() {
   return JSON.parse(fs.readFileSync(configPath, "utf8"));

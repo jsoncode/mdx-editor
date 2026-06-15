@@ -17,7 +17,13 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { isFfmpegBundled, readTauriConfig, setFfmpegBundle, writeTauriConfig } from "./ffmpeg-bundle-config.mjs";
+import {
+  isFfmpegBundled,
+  isFfmpegSidecarReady,
+  readTauriConfig,
+  setFfmpegBundle,
+  writeTauriConfig,
+} from "./ffmpeg-bundle-config.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -109,12 +115,21 @@ async function promptType() {
   }
 }
 
-function fetchFfmpeg() {
+function fetchFfmpegIfNeeded() {
+  if (isFfmpegSidecarReady()) {
+    console.log("\n>>> FFmpeg sidecar 已存在，跳过下载\n");
+    return;
+  }
+
   console.log("\n>>> 准备内置 FFmpeg sidecar…\n");
-  const result = spawnSync("node", ["scripts/fetch-ffmpeg.mjs"], {
+  const result = spawnSync("node", ["scripts/fetch-ffmpeg.mjs", "--with-ffmpeg"], {
     cwd: rootDir,
     stdio: "inherit",
     shell: true,
+    env: {
+      ...process.env,
+      TAURI_BUNDLE_FFMPEG: "1",
+    },
   });
   if (result.status !== 0) {
     throw new Error("下载 FFmpeg 失败，无法继续内置打包");
@@ -164,9 +179,10 @@ async function main() {
 
   try {
     if (withFfmpeg) {
-      fetchFfmpeg();
+      fetchFfmpegIfNeeded();
       setFfmpegBundle(true);
     } else {
+      console.log("\n>>> 未启用内置 FFmpeg，跳过下载\n");
       setFfmpegBundle(false);
     }
 
