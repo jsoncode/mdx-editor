@@ -328,6 +328,52 @@ fn ffprobe_executable(ffmpeg_executable: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(file_name))
 }
 
+fn needs_deep_probe(source_ext: &str) -> bool {
+    matches!(
+        source_ext,
+        "vob" | "mpg" | "mpeg" | "ts" | "m2ts" | "mts" | "rmvb" | "asf"
+    )
+}
+
+pub fn probe_has_video_stream(
+    app: &AppHandle,
+    user_path: Option<&str>,
+    source: &Path,
+) -> Option<bool> {
+    let (_, ffmpeg_path) = locate_ffmpeg(app, user_path).ok()?;
+    let ffprobe = ffprobe_executable(&ffmpeg_path);
+    if !ffprobe.is_file() {
+        return None;
+    }
+    let mut cmd = Command::new(&ffprobe);
+    prepare_ffmpeg_command(&mut cmd, &ffprobe);
+    cmd.args([
+        "-v",
+        "error",
+        "-probesize",
+        "100M",
+        "-analyzeduration",
+        "100M",
+        "-show_entries",
+        "stream=codec_type",
+        "-of",
+        "csv=p=0",
+    ])
+    .arg(source)
+    .stdin(Stdio::null())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+    let output = cmd.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    Some(
+        text.lines()
+            .any(|line| line.trim().eq_ignore_ascii_case("video")),
+    )
+}
+
 pub fn probe_media_duration(
     app: &AppHandle,
     user_path: Option<&str>,
@@ -407,27 +453,42 @@ pub fn transcode_media_to_file(
         message: "正在转码…".to_string(),
     });
 
-    let mut cmd = build_ffmpeg_command(app, user_path)?;
-    cmd.args(["-hide_banner", "-loglevel", "info", "-y", "-i"])
-        .arg(source)
-        .arg("-threads")
-        .arg("0");
+    let treat_as_video = if is_video_ext(source_ext) {
+        true
+    } else if is_audio_ext(source_ext) {
+        false
+    } else {
+        probe_has_video_stream(app, user_path, source).unwrap_or(true)
+    };
 
-    if is_video_ext(source_ext) {
+    let mut cmd = build_ffmpeg_command(app, user_path)?;
+    cmd.args(["-hide_banner", "-loglevel", "info", "-y"]);
+    if needs_deep_probe(source_ext) {
+        cmd.args(["-probesize", "100M", "-analyzeduration", "100M"]);
+    }
+    cmd.arg("-i").arg(source).arg("-threads").arg("0");
+
+    if treat_as_video {
         cmd.args([
+            "-map",
+            "0:v:0?",
+            "-map",
+            "0:a:0?",
             "-c:v",
             "libx264",
             "-preset",
             "veryfast",
             "-crf",
             "23",
+            "-pix_fmt",
+            "yuv420p",
             "-c:a",
             "aac",
             "-b:a",
             "128k",
         ]);
     } else {
-        cmd.args(["-vn", "-c:a", "aac", "-b:a", "192k"]);
+        cmd.args(["-vn", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "192k"]);
     }
 
     cmd.args(["-movflags", "+faststart"])

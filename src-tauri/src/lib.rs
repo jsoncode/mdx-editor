@@ -130,6 +130,7 @@ pub fn run() {
             commands::read_clipboard_file_paths,
             commands::list_assets,
             commands::get_asset_absolute_path,
+            commands::get_file_size,
             commands::resolve_media_preview,
             commands::get_ffmpeg_status,
             commands::ffmpeg_available,

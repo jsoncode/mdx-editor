@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback } from "react";
-import { insertResourceFromBytes, insertResourceFromPath } from "../lib/mediaInsert";
+import { insertResourceFromBytes, insertResourceFromPath, isMediaInsertCancelled } from "../lib/mediaInsert";
 import {
   clipboardHasFiles,
   extensionFromName,
@@ -23,9 +23,14 @@ export function useAssetInsert(
   const insertSnippet = useCallback(
     async (snippetPromise: Promise<string>) => {
       if (!workspaceId) return false;
-      const snippet = await snippetPromise;
-      insertAtCursor(`\n${snippet}\n`);
-      return true;
+      try {
+        const snippet = await snippetPromise;
+        insertAtCursor(`\n${snippet}\n`);
+        return true;
+      } catch (error) {
+        if (isMediaInsertCancelled(error)) return false;
+        throw error;
+      }
     },
     [workspaceId, insertAtCursor],
   );

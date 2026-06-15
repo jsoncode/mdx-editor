@@ -10,6 +10,12 @@ use crate::workspace::{
 };
 
 #[tauri::command]
+pub fn get_file_size(source_path: String) -> Result<u64, AppError> {
+    let meta = fs::metadata(&source_path)?;
+    Ok(meta.len())
+}
+
+#[tauri::command]
 pub fn insert_asset_from_path(
     workspaces: State<'_, WorkspaceManager>,
     workspace_id: String,

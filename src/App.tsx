@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { insertResourceFromPath } from "./lib/mediaInsert";
+import { insertResourceFromPath, isMediaInsertCancelled } from "./lib/mediaInsert";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Ribbon } from "./components/Ribbon";
@@ -14,6 +14,7 @@ import { DocumentHistoryPage } from "./components/DocumentHistoryPage";
 import { DocumentPropertiesDialog } from "./components/DocumentPropertiesDialog";
 import { PasswordPromptDialog } from "./components/PasswordPromptDialog";
 import { MissingRecentDocumentDialog } from "./components/MissingRecentDocumentDialog";
+import { ExportSuccessDialog } from "./components/ExportSuccessDialog";
 import { MediaTranscodePanel } from "./components/MediaTranscodePanel";
 import { useAutosave } from "./hooks/useAutosave";
 import { useDocumentActions } from "./hooks/useDocumentActions";
@@ -163,6 +164,7 @@ function App() {
               insertAtCursor(`\n${snippet}\n`);
               useUiStore.getState().setAppView("editor");
             } catch (error) {
+              if (isMediaInsertCancelled(error)) continue;
               console.warn("拖放插入资源失败:", error);
             }
           }
@@ -525,6 +527,7 @@ function App() {
 
       <PasswordPromptDialog />
       <MissingRecentDocumentDialog />
+      <ExportSuccessDialog />
       <MediaTranscodePanel />
     </div>
   );

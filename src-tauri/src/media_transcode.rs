@@ -7,9 +7,9 @@ use uuid::Uuid;
 
 use crate::asset_store::store_asset_from_path;
 use crate::error::{AppError, AppResult};
-use crate::media_preview::{is_direct_playable, target_extension, transcode_media_to_file};
+use crate::media_preview::{is_direct_playable, probe_has_video_stream, target_extension, transcode_media_to_file};
 use crate::workspace::{
-    extension_from_path, is_image_ext, markdown_snippet_for_asset, WorkspaceManager,
+    extension_from_path, is_image_ext, is_video_ext, markdown_snippet_for_asset, WorkspaceManager,
 };
 
 #[derive(Clone, Serialize)]
@@ -56,6 +56,20 @@ fn snippet_for_source(
         source_ext
     };
     markdown_snippet_for_asset(relative_path, output_ext, display_name)
+}
+
+fn snippet_for_transcoded_output(
+    relative_path: &str,
+    output_path: &Path,
+    source_ext: &str,
+    display_name: Option<&str>,
+    app: &AppHandle,
+    user_path: Option<&str>,
+) -> String {
+    let has_video = probe_has_video_stream(app, user_path, output_path)
+        .unwrap_or_else(|| is_video_ext(source_ext));
+    let snippet_ext = if has_video { "mp4" } else { "m4a" };
+    markdown_snippet_for_asset(relative_path, snippet_ext, display_name)
 }
 
 pub fn insert_media_from_path(
@@ -171,6 +185,14 @@ pub fn insert_media_from_path(
     );
 
     let relative_path = store_asset_from_path(&asset_dir, &temp_output)?;
+    let snippet = snippet_for_transcoded_output(
+        &relative_path,
+        &temp_output,
+        &ext,
+        Some(&display_name),
+        app,
+        user_path,
+    );
     let _ = fs::remove_file(&temp_output);
 
     emit_progress(
@@ -184,11 +206,7 @@ pub fn insert_media_from_path(
         },
     );
 
-    Ok(snippet_for_source(
-        &relative_path,
-        &ext,
-        Some(&display_name),
-    ))
+    Ok(snippet)
 }
 
 pub fn insert_media_from_bytes(

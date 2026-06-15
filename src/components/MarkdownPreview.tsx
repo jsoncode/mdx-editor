@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import type { ExtraProps } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { buildRemarkPlugins } from "../lib/markdownPlugins";
+import { rehypeUnwrapMedia } from "../lib/rehypeUnwrapMedia";
 import { openAttachmentWithConfirm } from "../lib/attachment";
 import { resolveAssetUrl, resolveMediaPreviewUrl, peekMediaPreviewUrl, getMediaPreviewRevision, subscribeMediaPreviewRevision } from "../lib/assetResolver";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -18,12 +19,6 @@ import {
   videoMimeType,
 } from "../lib/media";
 
-interface MarkdownPreviewProps {
-  content: string;
-  workspaceId: string | null;
-  onHtmlChange?: (html: string) => void;
-}
-
 function flattenText(children: React.ReactNode): string {
   if (typeof children === "string") return children;
   if (Array.isArray(children)) {
@@ -34,6 +29,43 @@ function flattenText(children: React.ReactNode): string {
     return flattenText(element.props.children);
   }
   return String(children ?? "");
+}
+
+interface MarkdownPreviewProps {
+  content: string;
+  workspaceId: string | null;
+  onHtmlChange?: (html: string) => void;
+}
+
+function mediaSrcFromProps(
+  props: (React.VideoHTMLAttributes<HTMLVideoElement> | React.AudioHTMLAttributes<HTMLAudioElement>) &
+    ExtraProps,
+): string | undefined {
+  if (typeof props.src === "string" && props.src.trim()) {
+    return props.src;
+  }
+
+  const node = props.node;
+  if (!node || node.type !== "element") return undefined;
+
+  const direct = node.properties?.src;
+  if (typeof direct === "string" && direct.trim()) return direct;
+  if (Array.isArray(direct)) {
+    const first = direct.find((value) => typeof value === "string" && value.trim());
+    if (typeof first === "string") return first;
+  }
+
+  for (const child of node.children) {
+    if (child.type !== "element" || child.tagName !== "source") continue;
+    const nested = child.properties?.src;
+    if (typeof nested === "string" && nested.trim()) return nested;
+    if (Array.isArray(nested)) {
+      const first = nested.find((value) => typeof value === "string" && value.trim());
+      if (typeof first === "string") return first;
+    }
+  }
+
+  return undefined;
 }
 
 function useResolvedAssetUrl(workspaceId: string | null, src?: string) {
@@ -103,16 +135,18 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
       setMediaError(String(error));
     };
 
-    const cached = peekMediaPreviewUrl(workspaceId, src, ffmpegPath);
-    if (cached) {
-      applyUrl(cached, false);
-      return;
-    }
-
     if (!needsMediaTranscode(normalized)) {
       setReady(false);
       setTranscoding(false);
       void resolveAssetUrl(workspaceId, src).then((url) => applyUrl(url, false));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const cached = peekMediaPreviewUrl(workspaceId, src, ffmpegPath);
+    if (cached) {
+      applyUrl(cached, false);
       return () => {
         cancelled = true;
       };
@@ -136,7 +170,6 @@ function useResolvedMediaUrl(workspaceId: string | null, src?: string) {
 function previewMimeFromPath(
   playbackPath: string,
   kind: "audio" | "video",
-  sourceExt: string,
 ): string | undefined {
   const previewExt = extensionFromPath(playbackPath);
   if (kind === "video") {
@@ -145,8 +178,64 @@ function previewMimeFromPath(
   if (previewExt === "m4a" || previewExt === "mp4") {
     return "audio/mp4";
   }
-  const fallbacks = audioMimeFallbacks(sourceExt);
+  const fallbacks = audioMimeFallbacks(previewExt);
   return fallbacks[0];
+}
+
+function AssetMedia({
+  src,
+  workspaceId,
+  kind,
+}: {
+  src?: string;
+  workspaceId: string | null;
+  kind: "audio" | "video";
+}) {
+  const { resolvedSrc, ready, transcoding, mediaError } = useResolvedMediaUrl(workspaceId, src);
+  if (!src) return null;
+
+  const playbackSrc = ready ? resolvedSrc : "";
+  const label = kind === "video" ? "视频" : "音频";
+
+  if (mediaError) {
+    return (
+      <p className="media-preview-status media-preview-error" aria-live="polite">
+        {label}预览失败：{mediaError}
+      </p>
+    );
+  }
+
+  if (transcoding || !playbackSrc) {
+    return (
+      <p className="media-preview-status" aria-live="polite">
+        正在准备{label}…
+      </p>
+    );
+  }
+
+  if (kind === "video") {
+    return (
+      <video
+        controls
+        className="preview-video"
+        preload="metadata"
+        src={playbackSrc}
+        style={{ maxWidth: "100%" }}
+      />
+    );
+  }
+
+  const mimeTypes = [previewMimeFromPath(playbackSrc, "audio")].filter(
+    (value): value is string => Boolean(value),
+  );
+
+  return (
+    <audio controls className="preview-audio" preload="metadata" src={playbackSrc}>
+      {mimeTypes.map((type) => (
+        <source key={type} src={playbackSrc} type={type} />
+      ))}
+    </audio>
+  );
 }
 
 function AssetImage({
@@ -160,95 +249,6 @@ function AssetImage({
 }) {
   const { resolvedSrc } = useResolvedAssetUrl(workspaceId, src);
   return <img src={resolvedSrc || src} alt={alt ?? ""} />;
-}
-
-function AssetVideo({
-  src,
-  workspaceId,
-}: {
-  src?: string;
-  workspaceId: string | null;
-}) {
-  const { resolvedSrc, ready, transcoding, mediaError } = useResolvedMediaUrl(workspaceId, src);
-  if (!src) return null;
-
-  const normalized = normalizeAssetPath(src);
-  const sourceExt = extensionFromPath(normalized);
-  const playbackSrc = ready ? resolvedSrc : "";
-  const mime = playbackSrc
-    ? previewMimeFromPath(playbackSrc, "video", sourceExt)
-    : videoMimeType(sourceExt);
-
-  if (mediaError) {
-    return (
-      <p className="media-preview-status media-preview-error" aria-live="polite">
-        视频预览失败：{mediaError}
-      </p>
-    );
-  }
-
-  if (transcoding || !playbackSrc) {
-    return (
-      <p className="media-preview-status" aria-live="polite">
-        正在准备视频…
-      </p>
-    );
-  }
-
-  return (
-    <video controls className="preview-video" preload="metadata" style={{ maxWidth: "100%" }}>
-      <source src={playbackSrc} type={mime} />
-    </video>
-  );
-}
-
-function AssetAudio({
-  src,
-  workspaceId,
-}: {
-  src?: string;
-  workspaceId: string | null;
-}) {
-  const { resolvedSrc, ready, transcoding, mediaError } = useResolvedMediaUrl(workspaceId, src);
-  if (!src) return null;
-
-  const normalized = normalizeAssetPath(src);
-  const sourceExt = extensionFromPath(normalized);
-  const playbackSrc = ready ? resolvedSrc : "";
-  const mimeTypes = playbackSrc
-    ? [previewMimeFromPath(playbackSrc, "audio", sourceExt)].filter(
-        (value): value is string => Boolean(value),
-      )
-    : audioMimeFallbacks(sourceExt);
-
-  if (mediaError) {
-    return (
-      <p className="media-preview-status media-preview-error" aria-live="polite">
-        音频预览失败：{mediaError}
-      </p>
-    );
-  }
-
-  if (transcoding || !playbackSrc) {
-    return (
-      <p className="media-preview-status" aria-live="polite">
-        正在准备音频…
-      </p>
-    );
-  }
-
-  return (
-    <audio
-      controls
-      className="preview-audio"
-      preload="metadata"
-      src={playbackSrc}
-    >
-      {mimeTypes.map((type) => (
-        <source key={type} src={playbackSrc} type={type} />
-      ))}
-    </audio>
-  );
 }
 
 function AttachmentLink({
@@ -304,10 +304,10 @@ function AssetLink({
   const ext = extensionFromPath(normalized);
   if (normalized.startsWith("asset/")) {
     if (isVideoExtension(ext)) {
-      return <AssetVideo src={href} workspaceId={workspaceId} />;
+      return <AssetMedia src={href} workspaceId={workspaceId} kind="video" />;
     }
     if (isAudioExtension(ext)) {
-      return <AssetAudio src={href} workspaceId={workspaceId} />;
+      return <AssetMedia src={href} workspaceId={workspaceId} kind="audio" />;
     }
   }
 
@@ -362,10 +362,10 @@ export function MarkdownPreview({
       ),
       video: (
         props: React.VideoHTMLAttributes<HTMLVideoElement> & ExtraProps,
-      ) => <AssetVideo src={props.src} workspaceId={workspaceId} />,
+      ) => <AssetMedia src={mediaSrcFromProps(props)} workspaceId={workspaceId} kind="video" />,
       audio: (
         props: React.AudioHTMLAttributes<HTMLAudioElement> & ExtraProps,
-      ) => <AssetAudio src={props.src} workspaceId={workspaceId} />,
+      ) => <AssetMedia src={mediaSrcFromProps(props)} workspaceId={workspaceId} kind="audio" />,
     }),
     [workspaceId],
   );
@@ -377,7 +377,7 @@ export function MarkdownPreview({
       ) : (
         <ReactMarkdown
           remarkPlugins={remarkPlugins}
-          rehypePlugins={[rehypeRaw]}
+          rehypePlugins={[rehypeRaw, rehypeUnwrapMedia]}
           components={components}
         >
           {content}

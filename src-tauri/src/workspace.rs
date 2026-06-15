@@ -263,7 +263,8 @@ pub fn is_image_ext(ext: &str) -> bool {
 pub fn is_video_ext(ext: &str) -> bool {
     matches!(
         ext,
-        "mp4" | "webm" | "mov" | "avi" | "mkv" | "m4v" | "wmv" | "flv" | "mpg" | "mpeg" | "3gp" | "ts"
+        "mp4" | "webm" | "mov" | "avi" | "mkv" | "m4v" | "wmv" | "flv" | "mpg" | "mpeg" | "3gp"
+            | "ts" | "m2ts" | "mts" | "vob" | "rmvb" | "ogv" | "asf" | "divx"
     )
 }
 

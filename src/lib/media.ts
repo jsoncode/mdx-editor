@@ -49,6 +49,13 @@ const VIDEO_EXTENSIONS = new Set([
   "mpeg",
   "3gp",
   "ts",
+  "m2ts",
+  "mts",
+  "vob",
+  "rmvb",
+  "ogv",
+  "asf",
+  "divx",
 ]);
 
 const AUDIO_EXTENSIONS = new Set([
@@ -123,7 +130,11 @@ export function extensionFromName(name: string): string {
 
 export function extensionFromPath(path: string): string {
   const normalized = path.replace(/\\/g, "/");
-  const name = normalized.split("/").pop() ?? path;
+  let name = normalized.split("/").pop() ?? path;
+  const query = name.indexOf("?");
+  if (query !== -1) name = name.slice(0, query);
+  const hash = name.indexOf("#");
+  if (hash !== -1) name = name.slice(0, hash);
   return extensionFromName(name);
 }
 
@@ -336,3 +347,19 @@ export function clipboardHasFiles(data: DataTransfer): boolean {
 
 /** Avoid loading very large blobs into JS when native path copy is available. */
 export const MAX_PASTE_BYTES = 64 * 1024 * 1024;
+
+/** 超过此大小的转码插入需用户确认 */
+export const TRANSCODE_SIZE_CONFIRM_BYTES = 100 * 1024 * 1024;
+
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${bytes} B`;
+}

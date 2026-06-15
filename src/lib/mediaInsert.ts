@@ -1,7 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { fileNameFromPath, needsMediaTranscode } from "./media";
+import { ensureLargeTranscodeConfirmed } from "./mediaTranscodeConfirm";
 import { useMediaTranscodeStore } from "../stores/mediaTranscodeStore";
 import { useSettingsStore } from "../stores/settingsStore";
+
+export { isMediaInsertCancelled, MediaInsertCancelledError } from "./mediaTranscodeConfirm";
 
 function createJobId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -37,6 +40,9 @@ export async function insertResourceFromPath(
       sourcePath,
     });
   }
+
+  const sizeBytes = await invoke<number>("get_file_size", { sourcePath });
+  await ensureLargeTranscodeConfirmed(fileName, sizeBytes);
 
   await ensureTranscodeListener();
   const jobId = createJobId();
@@ -74,6 +80,8 @@ export async function insertResourceFromBytes(
       bytes: Array.from(bytes),
     });
   }
+
+  await ensureLargeTranscodeConfirmed(fileNameFromPath(filename), bytes.length);
 
   await ensureTranscodeListener();
   const jobId = createJobId();

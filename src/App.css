@@ -1796,6 +1796,91 @@ body,
   border-color: #9ca3af;
 }
 
+.export-success-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.export-success-dialog {
+  width: min(520px, calc(100vw - 2rem));
+  padding: 1.25rem 1.5rem;
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.export-success-dialog h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.125rem;
+}
+
+.export-success-message {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-muted, #555);
+  line-height: 1.5;
+}
+
+.export-success-path {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f5f7fa;
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #333;
+  word-break: break-all;
+  user-select: text;
+  cursor: text;
+}
+
+.export-success-actions {
+  display: flex;
+  gap: 0.625rem;
+  justify-content: flex-end;
+}
+
+.export-success-actions button {
+  min-width: 5.5rem;
+  padding: 0.5rem 1.125rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.export-success-actions button.primary {
+  background: #4a7cff;
+  color: #fff;
+  border-color: #4a7cff;
+}
+
+.export-success-actions button.primary:hover {
+  background: #3d6de6;
+  border-color: #3d6de6;
+}
+
+.export-success-actions button.secondary {
+  background: #fff;
+  color: #374151;
+  border-color: #d0d7de;
+}
+
+.export-success-actions button.secondary:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
 .dialog-overlay {
   position: fixed;
   inset: 0;

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
-import { insertResourceFromPath } from "../lib/mediaInsert";
+import { insertResourceFromPath, isMediaInsertCancelled } from "../lib/mediaInsert";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   AUDIO_INSERT_OPEN_FILTERS,
@@ -24,6 +24,8 @@ import {
 } from "../lib/documentErrors";
 import { removeRecentFile } from "../lib/recentFiles";
 import { promptRemoveMissingRecentDocument } from "../lib/recentDocumentPrompt";
+import { requestExportSuccessPrompt } from "../lib/exportSuccessPrompt";
+import { revealVaultItem } from "../lib/vault";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
@@ -164,6 +166,7 @@ export function useDocumentActions(previewHtml: string) {
       const snippet = await insertResourceFromPath(workspaceId, selected);
       insertText(`\n${snippet}\n`);
     } catch (error) {
+      if (isMediaInsertCancelled(error)) return;
       await message(String(error), { title: "插入失败", kind: "error" });
     }
   };
@@ -184,6 +187,16 @@ export function useDocumentActions(previewHtml: string) {
     await insertAssetFromDialog("插入音视频", MEDIA_INSERT_OPEN_FILTERS);
   };
 
+  const confirmExportSuccess = async (outputPath: string, formatLabel: string) => {
+    const action = await requestExportSuccessPrompt(outputPath, formatLabel);
+    if (action !== "open") return;
+    try {
+      await revealVaultItem(outputPath);
+    } catch (error) {
+      await message(String(error), { title: "无法打开位置", kind: "error" });
+    }
+  };
+
   const handleExportMarkdown = async () => {
     if (!workspaceId) return;
     const selected = await save({
@@ -191,12 +204,17 @@ export function useDocumentActions(previewHtml: string) {
       filters: [{ name: "Markdown 文档", extensions: ["md"] }],
       defaultPath: "导出.md",
     });
-    if (typeof selected === "string") {
+    if (typeof selected !== "string") return;
+
+    try {
       await invoke("export_markdown", {
         workspaceId,
         outputPath: selected,
         includeAssets: true,
       });
+      await confirmExportSuccess(selected, "Markdown 文档");
+    } catch (error) {
+      await message(String(error), { title: "导出失败", kind: "error" });
     }
   };
 
@@ -207,10 +225,15 @@ export function useDocumentActions(previewHtml: string) {
       filters: [{ name: "HTML 网页", extensions: ["html"] }],
       defaultPath: "导出.html",
     });
-    if (typeof selected === "string") {
+    if (typeof selected !== "string") return;
+
+    try {
       const title = manifest?.title ?? "未命名文档";
       const html = buildExportHtml(title, previewHtml);
       await invoke("export_html", { outputPath: selected, html });
+      await confirmExportSuccess(selected, "HTML 网页");
+    } catch (error) {
+      await message(String(error), { title: "导出失败", kind: "error" });
     }
   };
 
@@ -237,7 +260,7 @@ export function useDocumentActions(previewHtml: string) {
         outputPath: selected,
         password,
       });
-      await message("加密 MDX 已导出。", { title: "导出完成", kind: "info" });
+      await confirmExportSuccess(selected, "加密 MDX 文件");
     } catch (error) {
       await message(String(error), { title: "加密导出失败", kind: "error" });
     }
