@@ -1,7 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
+import { insertResourceFromPath } from "../lib/mediaInsert";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AUDIO_INSERT_EXTENSIONS } from "../lib/media";
+import {
+  AUDIO_INSERT_OPEN_FILTERS,
+  IMAGE_INSERT_OPEN_FILTERS,
+  MEDIA_INSERT_OPEN_FILTERS,
+  VIDEO_INSERT_OPEN_FILTERS,
+} from "../lib/media";
 import { buildExportHtml } from "../lib/export";
 import {
   defaultSavePath,
@@ -12,6 +18,12 @@ import {
 } from "../lib/documentPaths";
 import { requestDocumentPassword } from "../lib/passwordPrompt";
 import { promptPlainMdSaveChoice } from "../lib/savePrompt";
+import {
+  formatDocumentOpenError,
+  isDocumentNotFoundError,
+} from "../lib/documentErrors";
+import { removeRecentFile } from "../lib/recentFiles";
+import { promptRemoveMissingRecentDocument } from "../lib/recentDocumentPrompt";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
@@ -149,10 +161,7 @@ export function useDocumentActions(previewHtml: string) {
     if (typeof selected !== "string") return;
 
     try {
-      const snippet = await invoke<string>("insert_asset_from_path", {
-        workspaceId,
-        sourcePath: selected,
-      });
+      const snippet = await insertResourceFromPath(workspaceId, selected);
       insertText(`\n${snippet}\n`);
     } catch (error) {
       await message(String(error), { title: "插入失败", kind: "error" });
@@ -160,49 +169,19 @@ export function useDocumentActions(previewHtml: string) {
   };
 
   const handleInsertImage = async () => {
-    await insertAssetFromDialog("插入图片", [
-      {
-        name: "图片",
-        extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff"],
-      },
-    ]);
+    await insertAssetFromDialog("插入图片", IMAGE_INSERT_OPEN_FILTERS);
   };
 
   const handleInsertVideo = async () => {
-    await insertAssetFromDialog("插入视频", [
-      {
-        name: "视频",
-        extensions: ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "flv"],
-      },
-    ]);
+    await insertAssetFromDialog("插入视频", VIDEO_INSERT_OPEN_FILTERS);
   };
 
   const handleInsertAudio = async () => {
-    await insertAssetFromDialog("插入音频", [
-      {
-        name: "音频",
-        extensions: AUDIO_INSERT_EXTENSIONS,
-      },
-    ]);
+    await insertAssetFromDialog("插入音频", AUDIO_INSERT_OPEN_FILTERS);
   };
 
   const handleInsertMedia = async () => {
-    await insertAssetFromDialog("插入音视频", [
-      {
-        name: "音视频",
-        extensions: [
-          "mp4",
-          "webm",
-          "mov",
-          "avi",
-          "mkv",
-          "m4v",
-          "wmv",
-          "flv",
-          ...AUDIO_INSERT_EXTENSIONS,
-        ],
-      },
-    ]);
+    await insertAssetFromDialog("插入音视频", MEDIA_INSERT_OPEN_FILTERS);
   };
 
   const handleExportMarkdown = async () => {
@@ -237,7 +216,7 @@ export function useDocumentActions(previewHtml: string) {
 
   const handleExportEncryptedMdx = async () => {
     if (!workspaceId) return;
-    const password = await requestDocumentPassword({
+    const { password } = await requestDocumentPassword({
       title: "加密导出 MDX",
       description: "设置密码后，导出的 MDX 文件将加密存储；打开时需要输入相同密码。",
       confirm: true,
@@ -271,7 +250,17 @@ export function useDocumentActions(previewHtml: string) {
       await updateTitle(path);
       useUiStore.getState().enterEditor();
     } catch (error) {
-      await message(String(error), { title: "打开失败", kind: "error" });
+      if (isDocumentNotFoundError(error)) {
+        const remove = await promptRemoveMissingRecentDocument(path, error);
+        if (remove) {
+          setRecentFiles(await removeRecentFile(path));
+        }
+        return;
+      }
+      await message(formatDocumentOpenError(path, error), {
+        title: "无法打开文档",
+        kind: "warning",
+      });
     }
   };
 

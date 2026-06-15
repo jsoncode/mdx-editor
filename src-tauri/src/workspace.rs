@@ -254,7 +254,10 @@ pub fn extension_from_path(path: &Path) -> String {
 }
 
 pub fn is_image_ext(ext: &str) -> bool {
-    matches!(ext, "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp")
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" | "tif" | "tiff"
+    )
 }
 
 pub fn is_video_ext(ext: &str) -> bool {

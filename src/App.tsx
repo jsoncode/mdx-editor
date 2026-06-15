@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { insertResourceFromPath } from "./lib/mediaInsert";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Ribbon } from "./components/Ribbon";
@@ -12,6 +13,8 @@ import { SettingsPage } from "./components/SettingsPage";
 import { DocumentHistoryPage } from "./components/DocumentHistoryPage";
 import { DocumentPropertiesDialog } from "./components/DocumentPropertiesDialog";
 import { PasswordPromptDialog } from "./components/PasswordPromptDialog";
+import { MissingRecentDocumentDialog } from "./components/MissingRecentDocumentDialog";
+import { MediaTranscodePanel } from "./components/MediaTranscodePanel";
 import { useAutosave } from "./hooks/useAutosave";
 import { useDocumentActions } from "./hooks/useDocumentActions";
 import { usePrintLayout } from "./hooks/usePrintLayout";
@@ -21,6 +24,7 @@ import { isInsertablePath, isMarkdownDocumentPath } from "./lib/media";
 import { MARKDOWN_DOCUMENT_SAVE_FILTERS, defaultSavePath, isPlainMdPath } from "./lib/documentPaths";
 import { promptPlainMdSaveChoice } from "./lib/savePrompt";
 import { notifyGitPushFailed } from "./lib/gitSyncWorkflow";
+import { flushEditorContentToStore } from "./lib/editorContent";
 import { isIdleSession } from "./lib/session";
 import { saveGuard } from "./lib/saveGuard";
 import { isCloseDocumentShortcut, isSaveShortcut, consumeShortcut } from "./lib/appShortcuts";
@@ -34,7 +38,6 @@ import "./App.css";
 function App() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [documentCloseDialogOpen, setDocumentCloseDialogOpen] = useState(false);
-  const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
   const forceClosingRef = useRef(false);
   const isDirtyRef = useRef(false);
   const isHandlingCloseRef = useRef(false);
@@ -156,10 +159,7 @@ function App() {
             if (!workspaceId || !insertAtCursor) continue;
 
             try {
-              const snippet = await invoke<string>("insert_asset_from_path", {
-                workspaceId,
-                sourcePath: path,
-              });
+              const snippet = await insertResourceFromPath(workspaceId, path);
               insertAtCursor(`\n${snippet}\n`);
               useUiStore.getState().setAppView("editor");
             } catch (error) {
@@ -186,7 +186,7 @@ function App() {
     forceClosingRef.current = true;
     isDirtyRef.current = false;
     setCloseDialogOpen(false);
-    setQuitConfirmOpen(false);
+    setDocumentCloseDialogOpen(false);
     await getCurrentWindow().destroy();
   }, []);
 
@@ -226,15 +226,11 @@ function App() {
       return;
     }
 
+    flushEditorContentToStore();
     const { isDirty, workspaceId } = useDocumentStore.getState();
     diagSaveCloseState("requestQuitApp", { isDirty, hasWorkspace: Boolean(workspaceId) });
     if (isDirty) {
       setCloseDialogOpen(true);
-      return;
-    }
-
-    if (workspaceId) {
-      setQuitConfirmOpen(true);
       return;
     }
 
@@ -246,12 +242,11 @@ function App() {
       diag("close", "requestCloseDocument_skipped_handling", {}, "warn");
       return;
     }
-    if (closeDialogOpen || documentCloseDialogOpen || switchDialogOpen || quitConfirmOpen) {
+    if (closeDialogOpen || documentCloseDialogOpen || switchDialogOpen) {
       diag("close", "requestCloseDocument_skipped_dialog_open", {
         closeDialogOpen,
         documentCloseDialogOpen,
         switchDialogOpen,
-        quitConfirmOpen,
       });
       return;
     }
@@ -259,6 +254,8 @@ function App() {
       diag("close", "requestCloseDocument_blocked_by_saveGuard", saveGuard.getDebugInfo(), "warn");
       return;
     }
+
+    flushEditorContentToStore();
 
     if (isIdleSession()) {
       diag("close", "requestCloseDocument_idle_to_quit");
@@ -278,7 +275,6 @@ function App() {
     closeDialogOpen,
     documentCloseDialogOpen,
     switchDialogOpen,
-    quitConfirmOpen,
     requestQuitApp,
     returnToWelcomeAfterClose,
   ]);
@@ -502,17 +498,6 @@ function App() {
       />
 
       <UnsavedDialog
-        open={quitConfirmOpen}
-        variant="confirm"
-        title="退出应用"
-        message="确定要退出 MDX Editor 吗？"
-        confirmLabel="退出"
-        onSave={() => setQuitConfirmOpen(false)}
-        onDiscard={() => void forceDestroy()}
-        onCancel={() => setQuitConfirmOpen(false)}
-      />
-
-      <UnsavedDialog
         open={documentCloseDialogOpen}
         title="关闭文档"
         message="文档有未保存的更改，是否在关闭前保存？"
@@ -539,6 +524,8 @@ function App() {
       />
 
       <PasswordPromptDialog />
+      <MissingRecentDocumentDialog />
+      <MediaTranscodePanel />
     </div>
   );
 }

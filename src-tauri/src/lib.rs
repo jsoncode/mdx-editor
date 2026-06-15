@@ -8,6 +8,7 @@ mod launch;
 mod manifest;
 mod md_import;
 mod mdx;
+mod media_transcode;
 mod media_preview;
 mod vault;
 mod versions;
@@ -124,6 +125,8 @@ pub fn run() {
             commands::reveal_vault_item_cmd,
             commands::insert_asset_from_path,
             commands::insert_asset_from_bytes,
+            commands::insert_media_from_path,
+            commands::insert_media_from_bytes,
             commands::read_clipboard_file_paths,
             commands::list_assets,
             commands::get_asset_absolute_path,

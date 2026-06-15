@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { message } from "@tauri-apps/plugin-dialog";
 import { useDocumentActions } from "../hooks/useDocumentActions";
 import {
   clearRecentFiles,
@@ -8,6 +9,7 @@ import {
   groupRecentFiles,
   removeRecentFile,
 } from "../lib/recentFiles";
+import { revealVaultItem } from "../lib/vault";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
 import type { RecentFileEntry, RecentGroupMode, RecentSortMode } from "../types/recent";
@@ -50,12 +52,24 @@ export function RecentFilesPage() {
 
   const handleOpen = async (path: string) => {
     await handleOpenPath(path);
+    setEntries(useDocumentStore.getState().recentFiles);
   };
 
   const handleRemove = async (path: string) => {
     const next = await removeRecentFile(path);
     setEntries(next);
     setRecentFiles(next);
+  };
+
+  const handleReveal = async (path: string) => {
+    try {
+      await revealVaultItem(path);
+    } catch {
+      await message("无法打开所在文件夹，文件可能已被移动或删除。", {
+        title: "无法进入",
+        kind: "warning",
+      });
+    }
   };
 
   const handleClear = async () => {
@@ -147,6 +161,14 @@ export function RecentFilesPage() {
                       <span className="recent-path">{file.path}</span>
                     </button>
                     <span className="recent-time">{formatRecentTime(file.openedAt)}</span>
+                    <button
+                      type="button"
+                      className="recent-reveal"
+                      title="在文件管理器中打开所在文件夹"
+                      onClick={() => void handleReveal(file.path)}
+                    >
+                      进入
+                    </button>
                     <button
                       type="button"
                       className="recent-remove"

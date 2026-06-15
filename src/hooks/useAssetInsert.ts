@@ -1,5 +1,6 @@
-import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useCallback } from "react";
+import { insertResourceFromBytes, insertResourceFromPath } from "../lib/mediaInsert";
 import {
   clipboardHasFiles,
   extensionFromName,
@@ -32,12 +33,7 @@ export function useAssetInsert(
   const insertFromPath = useCallback(
     async (sourcePath: string) => {
       if (!workspaceId) return false;
-      return insertSnippet(
-        invoke<string>("insert_asset_from_path", {
-          workspaceId,
-          sourcePath,
-        }),
-      );
+      return insertSnippet(insertResourceFromPath(workspaceId, sourcePath));
     },
     [workspaceId, insertSnippet],
   );
@@ -45,13 +41,7 @@ export function useAssetInsert(
   const insertFromBytes = useCallback(
     async (filename: string, bytes: Uint8Array) => {
       if (!workspaceId) return false;
-      return insertSnippet(
-        invoke<string>("insert_asset_from_bytes", {
-          workspaceId,
-          filename,
-          bytes: Array.from(bytes),
-        }),
-      );
+      return insertSnippet(insertResourceFromBytes(workspaceId, filename, bytes));
     },
     [workspaceId, insertSnippet],
   );

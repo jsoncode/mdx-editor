@@ -5,10 +5,6 @@ import rehypeRaw from "rehype-raw";
 import { buildRemarkPlugins } from "../lib/markdownPlugins";
 import { openAttachmentWithConfirm } from "../lib/attachment";
 import { resolveAssetUrl, resolveMediaPreviewUrl, peekMediaPreviewUrl, getMediaPreviewRevision, subscribeMediaPreviewRevision } from "../lib/assetResolver";
-import {
-  subscribeMediaPrewarmProgress,
-  type MediaPrewarmProgress,
-} from "../lib/mediaPrewarm";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
   audioMimeFallbacks,
@@ -329,9 +325,6 @@ export function MarkdownPreview({
 }: MarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const markdownSingleLineBreaks = useSettingsStore((s) => s.markdownSingleLineBreaks);
-  const [prewarmProgress, setPrewarmProgress] = useState<MediaPrewarmProgress | null>(null);
-
-  useEffect(() => subscribeMediaPrewarmProgress(setPrewarmProgress), []);
 
   const remarkPlugins = useMemo(
     () => buildRemarkPlugins(markdownSingleLineBreaks),
@@ -379,15 +372,6 @@ export function MarkdownPreview({
 
   return (
     <div ref={containerRef} className="markdown-preview">
-      {prewarmProgress && prewarmProgress.done < prewarmProgress.total ? (
-        <p className="media-prewarm-banner" aria-live="polite">
-          正在后台转码媒体（{prewarmProgress.done}/{prewarmProgress.total}）
-          {prewarmProgress.current
-            ? `：${fileNameFromPath(prewarmProgress.current)}`
-            : ""}
-          …
-        </p>
-      ) : null}
       {isEmpty ? (
         <p className="markdown-preview-empty">请在左侧编辑区插入内容</p>
       ) : (

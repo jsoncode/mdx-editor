@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -6,6 +6,7 @@ import {
   openDiagnosticLogDir,
   readDiagnosticLogTail,
 } from "../lib/diagnosticLog";
+import { formatDiagnosticLogPreview } from "../lib/diagnosticLogFormat";
 import { testVaultGit } from "../lib/gitSync";
 import {
   DEFAULT_DOCUMENT_HISTORY_DEPTH,
@@ -15,14 +16,47 @@ import {
   MAX_HISTORY_DEPTH,
   MIN_HISTORY_DEPTH,
 } from "../lib/settings";
-import { useDocumentStore } from "../stores/documentStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { cancelMediaPrewarm, prewarmDocumentMedia } from "../lib/mediaPrewarm";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
 import type { GitSyncSettings } from "../types/settings";
 import type { FfmpegStatus } from "../types/ffmpeg";
 import { ffmpegSourceLabel } from "../types/ffmpeg";
+
+type LogViewMode = "formatted" | "raw";
+
+function SettingsInlineActions({ children }: { children: ReactNode }) {
+  return <div className="settings-inline-actions">{children}</div>;
+}
+
+function LogViewToggle({
+  mode,
+  onChange,
+}: {
+  mode: LogViewMode;
+  onChange: (mode: LogViewMode) => void;
+}) {
+  return (
+    <div className="settings-log-view-toggle" role="group" aria-label="日志预览模式">
+      <button
+        type="button"
+        className={mode === "formatted" ? "active" : ""}
+        aria-pressed={mode === "formatted"}
+        onClick={() => onChange("formatted")}
+      >
+        格式化
+      </button>
+      <button
+        type="button"
+        className={mode === "raw" ? "active" : ""}
+        aria-pressed={mode === "raw"}
+        onClick={() => onChange("raw")}
+      >
+        原文
+      </button>
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const editorHistoryDepth = useSettingsStore((s) => s.editorHistoryDepth);
@@ -56,12 +90,23 @@ export function SettingsPage() {
   const [savedHint, setSavedHint] = useState(false);
   const [logDir, setLogDir] = useState("");
   const [logPreview, setLogPreview] = useState("");
+  const [logViewMode, setLogViewMode] = useState<LogViewMode>("formatted");
   const [loadingLog, setLoadingLog] = useState(false);
 
   useEffect(() => {
     void getDiagnosticLogDir().then(setLogDir).catch(() => undefined);
     void refreshLogPreview();
   }, []);
+
+  const displayLogPreview = useMemo(() => {
+    if (!logPreview) {
+      return "";
+    }
+    if (logViewMode === "raw") {
+      return logPreview;
+    }
+    return formatDiagnosticLogPreview(logPreview);
+  }, [logPreview, logViewMode]);
 
   const refreshLogPreview = async () => {
     setLoadingLog(true);
@@ -72,6 +117,7 @@ export function SettingsPage() {
       setLoadingLog(false);
     }
   };
+
   const resetForm = () => {
     setEditorDepth(String(editorHistoryDepth));
     setDocumentDepth(String(documentHistoryDepth));
@@ -148,11 +194,6 @@ export function SettingsPage() {
     }).then(() => {
       setSavedHint(true);
       window.setTimeout(() => setSavedHint(false), 2000);
-      const { workspaceId, content } = useDocumentStore.getState();
-      if (workspaceId) {
-        cancelMediaPrewarm();
-        void prewarmDocumentMedia(workspaceId, content, ffmpegPathInput);
-      }
     });
   };
 
@@ -229,260 +270,271 @@ export function SettingsPage() {
         </div>
 
         <div className="settings-page-body">
-        <section className="settings-card">
-          <h2>编辑器</h2>
-          <div className="settings-form">
-            <label className="settings-field">
-              <span className="settings-label">撤销 / 重做步数</span>
-              <span className="settings-hint">
-                编辑器内可撤销的操作次数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}）
-              </span>
-              <input
-                type="number"
-                min={MIN_HISTORY_DEPTH}
-                max={MAX_HISTORY_DEPTH}
-                value={editorDepth}
-                onChange={(event) => setEditorDepth(event.target.value)}
-              />
-            </label>
+          <section className="settings-card">
+            <h2>编辑器</h2>
+            <div className="settings-form">
+              <label className="settings-field">
+                <span className="settings-label">撤销 / 重做步数</span>
+                <span className="settings-hint">
+                  编辑器内可撤销的操作次数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}）
+                </span>
+                <input
+                  type="number"
+                  min={MIN_HISTORY_DEPTH}
+                  max={MAX_HISTORY_DEPTH}
+                  value={editorDepth}
+                  onChange={(event) => setEditorDepth(event.target.value)}
+                />
+              </label>
 
-            <label className="settings-field">
-              <span className="settings-label">历史修改步数</span>
-              <span className="settings-hint">
-                每个文档保留的保存差异记录条数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}，存入 versions.json）
-              </span>
-              <input
-                type="number"
-                min={MIN_HISTORY_DEPTH}
-                max={MAX_HISTORY_DEPTH}
-                value={documentDepth}
-                onChange={(event) => setDocumentDepth(event.target.value)}
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="settings-card">
-          <h2>Markdown 预览</h2>
-          <p className="settings-card-desc">
-            控制分屏/预览模式下 Markdown 的渲染方式。标准 Markdown 规范要求<strong>空一行（两次换行）</strong>
-            才会开始新段落；单次换行在标准模式下会被合并为空格。
-          </p>
-          <div className="settings-form">
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={singleLineBreaksEnabled}
-                onChange={(event) => setSingleLineBreaksEnabled(event.target.checked)}
-              />
-              <span>单行换行即换行（非标准）</span>
-            </label>
-            <p className="settings-hint settings-hint-block">
-              开启后，按一次 Enter 产生的换行在预览中会显示为新的一行，类似部分即时通讯软件的排版。
-              关闭时遵循标准 Markdown 规则（推荐，与其他编辑器/平台兼容性更好）。
-            </p>
-          </div>
-        </section>
-
-        <section className="settings-card">
-          <h2>文件属性记录</h2>
-          <p className="settings-card-desc">保存文档时写入 manifest.json；关闭后不会记录对应字段。</p>
-          <div className="settings-form">
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={deviceEnabled}
-                onChange={(event) => setDeviceEnabled(event.target.checked)}
-              />
-              <span>记录设备信息（操作系统、架构、主机名）</span>
-            </label>
-
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={locationEnabled}
-                onChange={(event) => setLocationEnabled(event.target.checked)}
-              />
-              <span>记录经纬度坐标（需浏览器/系统定位权限）</span>
-            </label>
-          </div>
-        </section>
-
-        <section className="settings-card">
-          <h2>媒体预览</h2>
-          <p className="settings-card-desc">
-            预览 WMA、WMV、AVI 等浏览器不支持的格式时，需要 FFmpeg 转码。若系统 PATH
-            中已安装 FFmpeg，留空下方路径即可自动使用，无需手动配置。
-          </p>
-          {ffmpegStatus?.available ? (
-            <p className="settings-hint settings-hint-ok settings-hint-block">
-              已检测到 FFmpeg（{ffmpegSourceLabel(ffmpegStatus.source ?? "")}
-              {ffmpegStatus.path ? `：${ffmpegStatus.path}` : ""}）
-              {ffmpegStatus.source === "path" && !ffmpegPathInput.trim()
-                ? "，可直接预览需转码的媒体。"
-                : ""}
-            </p>
-          ) : ffmpegStatus ? (
-            <p className="settings-hint settings-hint-warn settings-hint-block">
-              未检测到可用的 FFmpeg。请安装并加入系统 PATH，或使用下方路径手动指定。
-            </p>
-          ) : null}
-          <div className="settings-form">
-            <label className="settings-field">
-              <span className="settings-label">FFmpeg 路径（可选）</span>
-              <span className="settings-hint">
-                仅在系统 PATH 无法识别或需指定特定版本时填写；留空则自动使用 PATH → 内置
-                FFmpeg（若安装包已包含）
-              </span>
-              <input
-                className="settings-input-wide"
-                type="text"
-                value={ffmpegPathInput}
-                onChange={(event) => setFfmpegPathInput(event.target.value)}
-                placeholder="留空以自动使用系统 PATH"
-              />
-            </label>
-            <div className="settings-git-actions">
-              <button type="button" className="secondary" onClick={() => void handleBrowseFfmpeg()}>
-                浏览…
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={testingFfmpeg}
-                onClick={() => void handleTestFfmpeg()}
-              >
-                {testingFfmpeg ? "测试中…" : "测试 FFmpeg"}
-              </button>
+              <label className="settings-field">
+                <span className="settings-label">历史修改步数</span>
+                <span className="settings-hint">
+                  每个文档保留的保存差异记录条数（{MIN_HISTORY_DEPTH}–{MAX_HISTORY_DEPTH}，存入 versions.json）
+                </span>
+                <input
+                  type="number"
+                  min={MIN_HISTORY_DEPTH}
+                  max={MAX_HISTORY_DEPTH}
+                  value={documentDepth}
+                  onChange={(event) => setDocumentDepth(event.target.value)}
+                />
+              </label>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="settings-card">
-          <h2>Git 同步</h2>
-          <p className="settings-card-desc">
-            对当前工作区目录进行 Git 管理：打开文档前拉取远程更新，保存后在后台推送（关闭应用后仍会继续完成）。
-          </p>
-          <div className="settings-form">
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={gitEnabled}
-                onChange={(event) => setGitEnabled(event.target.checked)}
-              />
-              <span>启用 Git 同步</span>
-            </label>
-
-            <label className="settings-field">
-              <span className="settings-label">远程仓库地址</span>
-              <span className="settings-hint">HTTPS 地址，例如 https://github.com/user/repo.git</span>
-              <input
-                className="settings-input-wide"
-                type="url"
-                value={remoteUrl}
-                onChange={(event) => setRemoteUrl(event.target.value)}
-                placeholder="https://github.com/user/repo.git"
-                disabled={!gitEnabled}
-              />
-            </label>
-
-            <label className="settings-field">
-              <span className="settings-label">访问 Token</span>
-              <span className="settings-hint">Personal Access Token，用于 HTTPS 认证（保存在本地设置中）</span>
-              <input
-                className="settings-input-wide"
-                type="password"
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-                autoComplete="off"
-                disabled={!gitEnabled}
-              />
-            </label>
-
-            <label className="settings-field">
-              <span className="settings-label">分支</span>
-              <input
-                type="text"
-                value={branch}
-                onChange={(event) => setBranch(event.target.value)}
-                placeholder={DEFAULT_GIT_BRANCH}
-                disabled={!gitEnabled}
-              />
-            </label>
-
-            <label className="settings-field">
-              <span className="settings-label">提交者姓名</span>
-              <input
-                className="settings-input-wide"
-                type="text"
-                value={authorName}
-                onChange={(event) => setAuthorName(event.target.value)}
-                disabled={!gitEnabled}
-              />
-            </label>
-
-            <label className="settings-field">
-              <span className="settings-label">提交者邮箱</span>
-              <input
-                className="settings-input-wide"
-                type="email"
-                value={authorEmail}
-                onChange={(event) => setAuthorEmail(event.target.value)}
-                disabled={!gitEnabled}
-              />
-            </label>
-
-            <label className="settings-field">
-              <span className="settings-label">提交说明模板</span>
-              <span className="settings-hint">可用变量：{"{{date}}"}、{"{{file}}"}</span>
-              <input
-                className="settings-input-wide"
-                type="text"
-                value={commitTemplate}
-                onChange={(event) => setCommitTemplate(event.target.value)}
-                disabled={!gitEnabled}
-              />
-            </label>
-
-            <div className="settings-git-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={!gitEnabled || testingGit}
-                onClick={() => void handleTestGit()}
-              >
-                {testingGit ? "测试中…" : "测试连接"}
-              </button>
-              {vaultPath ? (
-                <span className="settings-hint">当前工作区：{vaultPath}</span>
-              ) : (
-                <span className="settings-hint settings-hint-warn">尚未打开工作区</span>
-              )}
+          <section className="settings-card">
+            <h2>Markdown 预览</h2>
+            <p className="settings-card-desc">
+              控制分屏/预览模式下 Markdown 的渲染方式。标准 Markdown 规范要求<strong>空一行（两次换行）</strong>
+              才会开始新段落；单次换行在标准模式下会被合并为空格。
+            </p>
+            <div className="settings-form">
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={singleLineBreaksEnabled}
+                  onChange={(event) => setSingleLineBreaksEnabled(event.target.checked)}
+                />
+                <span>单行换行即换行（非标准）</span>
+              </label>
+              <p className="settings-hint settings-hint-block">
+                开启后，按一次 Enter 产生的换行在预览中会显示为新的一行，类似部分即时通讯软件的排版。
+                关闭时遵循标准 Markdown 规则（推荐，与其他编辑器/平台兼容性更好）。
+              </p>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="settings-section">
-          <h3>诊断日志</h3>
-          <p className="settings-hint">
-            保存异常或意外退出时，请打开日志文件夹，将当天日志（mdx-editor-YYYY-MM-DD.log）发给开发者。
-          </p>
-          {logDir && <p className="settings-hint settings-log-path">{logDir}</p>}
-          <div className="settings-git-actions">
-            <button type="button" className="secondary" onClick={() => void openDiagnosticLogDir()}>
-              打开日志文件夹
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={loadingLog}
-              onClick={() => void refreshLogPreview()}
-            >
-              {loadingLog ? "加载中…" : "刷新预览"}
-            </button>
-          </div>
-          {logPreview && <pre className="settings-log-preview">{logPreview}</pre>}
-        </section>
+          <section className="settings-card">
+            <h2>文件属性记录</h2>
+            <p className="settings-card-desc">保存文档时写入 manifest.json；关闭后不会记录对应字段。</p>
+            <div className="settings-form">
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={deviceEnabled}
+                  onChange={(event) => setDeviceEnabled(event.target.checked)}
+                />
+                <span>记录设备信息（操作系统、架构、主机名）</span>
+              </label>
+
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={locationEnabled}
+                  onChange={(event) => setLocationEnabled(event.target.checked)}
+                />
+                <span>记录经纬度坐标（需浏览器/系统定位权限）</span>
+              </label>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h2>媒体预览</h2>
+            <p className="settings-card-desc">
+              预览 WMA、WMV、AVI 等浏览器不支持的格式时，需要 FFmpeg 转码。若系统 PATH
+              中已安装 FFmpeg，留空下方路径即可自动使用，无需手动配置。
+            </p>
+            {ffmpegStatus?.available ? (
+              <p className="settings-hint settings-hint-ok settings-hint-block">
+                已检测到 FFmpeg（{ffmpegSourceLabel(ffmpegStatus.source ?? "")}
+                {ffmpegStatus.path ? `：${ffmpegStatus.path}` : ""}）
+                {ffmpegStatus.source === "path" && !ffmpegPathInput.trim()
+                  ? "，可直接预览需转码的媒体。"
+                  : ""}
+              </p>
+            ) : ffmpegStatus ? (
+              <p className="settings-hint settings-hint-warn settings-hint-block">
+                未检测到可用的 FFmpeg。请安装并加入系统 PATH，或使用下方路径手动指定。
+              </p>
+            ) : null}
+            <div className="settings-form settings-form-compact">
+              <label className="settings-field">
+                <span className="settings-label">FFmpeg 路径（可选）</span>
+                <span className="settings-hint">
+                  仅在系统 PATH 无法识别或需指定特定版本时填写；留空则自动使用 PATH → 内置
+                  FFmpeg（若安装包已包含）
+                </span>
+                <input
+                  className="settings-input-wide"
+                  type="text"
+                  value={ffmpegPathInput}
+                  onChange={(event) => setFfmpegPathInput(event.target.value)}
+                  placeholder="留空以自动使用系统 PATH"
+                />
+              </label>
+              <SettingsInlineActions>
+                <button type="button" className="secondary" onClick={() => void handleBrowseFfmpeg()}>
+                  浏览…
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={testingFfmpeg}
+                  onClick={() => void handleTestFfmpeg()}
+                >
+                  {testingFfmpeg ? "测试中…" : "测试 FFmpeg"}
+                </button>
+              </SettingsInlineActions>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h2>Git 同步</h2>
+            <p className="settings-card-desc">
+              对当前工作区目录进行 Git 管理：打开文档前拉取远程更新，保存后在后台推送（关闭应用后仍会继续完成）。
+            </p>
+            <div className="settings-form">
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={gitEnabled}
+                  onChange={(event) => setGitEnabled(event.target.checked)}
+                />
+                <span>启用 Git 同步</span>
+              </label>
+
+              <label className="settings-field">
+                <span className="settings-label">远程仓库地址</span>
+                <span className="settings-hint">HTTPS 地址，例如 https://github.com/user/repo.git</span>
+                <input
+                  className="settings-input-wide"
+                  type="url"
+                  value={remoteUrl}
+                  onChange={(event) => setRemoteUrl(event.target.value)}
+                  placeholder="https://github.com/user/repo.git"
+                  disabled={!gitEnabled}
+                />
+              </label>
+
+              <label className="settings-field">
+                <span className="settings-label">访问 Token</span>
+                <span className="settings-hint">Personal Access Token，用于 HTTPS 认证（保存在本地设置中）</span>
+                <input
+                  className="settings-input-wide"
+                  type="password"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                  autoComplete="off"
+                  disabled={!gitEnabled}
+                />
+              </label>
+
+              <label className="settings-field">
+                <span className="settings-label">分支</span>
+                <input
+                  type="text"
+                  value={branch}
+                  onChange={(event) => setBranch(event.target.value)}
+                  placeholder={DEFAULT_GIT_BRANCH}
+                  disabled={!gitEnabled}
+                />
+              </label>
+
+              <label className="settings-field">
+                <span className="settings-label">提交者姓名</span>
+                <input
+                  className="settings-input-wide"
+                  type="text"
+                  value={authorName}
+                  onChange={(event) => setAuthorName(event.target.value)}
+                  disabled={!gitEnabled}
+                />
+              </label>
+
+              <label className="settings-field">
+                <span className="settings-label">提交者邮箱</span>
+                <input
+                  className="settings-input-wide"
+                  type="email"
+                  value={authorEmail}
+                  onChange={(event) => setAuthorEmail(event.target.value)}
+                  disabled={!gitEnabled}
+                />
+              </label>
+
+              <label className="settings-field">
+                <span className="settings-label">提交说明模板</span>
+                <span className="settings-hint">可用变量：{"{{date}}"}、{"{{file}}"}</span>
+                <input
+                  className="settings-input-wide"
+                  type="text"
+                  value={commitTemplate}
+                  onChange={(event) => setCommitTemplate(event.target.value)}
+                  disabled={!gitEnabled}
+                />
+              </label>
+
+              <div className="settings-git-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!gitEnabled || testingGit}
+                  onClick={() => void handleTestGit()}
+                >
+                  {testingGit ? "测试中…" : "测试连接"}
+                </button>
+                {vaultPath ? (
+                  <span className="settings-hint">当前工作区：{vaultPath}</span>
+                ) : (
+                  <span className="settings-hint settings-hint-warn">尚未打开工作区</span>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <h3>诊断日志</h3>
+            <p className="settings-hint">
+              保存异常或意外退出时，请打开日志文件夹，将当天日志（mdx-editor-YYYY-MM-DD.log）发给开发者。
+            </p>
+            {logDir && <p className="settings-hint settings-log-path">{logDir}</p>}
+            <div className="settings-log-toolbar">
+              <SettingsInlineActions>
+                <button type="button" className="secondary" onClick={() => void openDiagnosticLogDir()}>
+                  打开日志文件夹
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={loadingLog}
+                  onClick={() => void refreshLogPreview()}
+                >
+                  {loadingLog ? "加载中…" : "刷新预览"}
+                </button>
+              </SettingsInlineActions>
+              <LogViewToggle mode={logViewMode} onChange={setLogViewMode} />
+            </div>
+            {displayLogPreview ? (
+              <pre
+                className={`settings-log-preview${
+                  logViewMode === "formatted" ? " is-formatted" : " is-raw"
+                }`}
+              >
+                {displayLogPreview}
+              </pre>
+            ) : null}
+          </section>
         </div>
       </div>
 

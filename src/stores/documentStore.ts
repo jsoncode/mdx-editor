@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { clearAssetCache } from "../lib/assetResolver";
-import { cancelMediaPrewarm, prewarmDocumentMedia } from "../lib/mediaPrewarm";
 import { applyDocumentMetadata } from "../lib/documentMetadata";
 import { isPlainMdPath } from "../lib/documentPaths";
 import { recordDocumentHistory } from "../lib/documentHistory";
@@ -11,6 +10,11 @@ import { addRecentFile } from "../lib/recentFiles";
 import { flushEditorContentToStore, getEditorFlushStats } from "../lib/editorContent";
 import { diag, diagSaveCloseState } from "../lib/diagnosticLog";
 import { requestDocumentPassword } from "../lib/passwordPrompt";
+import {
+  forgetRememberedPassword,
+  getRememberedPassword,
+  setRememberedPassword,
+} from "../lib/encryptedPasswordStore";
 import { saveGuard } from "../lib/saveGuard";
 import type { DocumentState, Manifest, SaveStatus } from "../types/document";
 import type { RecentFileEntry } from "../types/recent";
@@ -99,7 +103,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (workspaceId) {
       await invoke("close_document", { workspaceId });
     }
-    cancelMediaPrewarm();
     clearAssetCache();
     const doc = await invoke<DocumentState>("create_document");
     set({
@@ -126,7 +129,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       await pullVaultBeforeAccess(vaultPath);
     }
 
-    cancelMediaPrewarm();
     clearAssetCache();
 
     let password: string | null = null;
@@ -134,13 +136,53 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (isMdx) {
       const encrypted = await invoke<boolean>("is_encrypted_mdx", { path });
       if (encrypted) {
-        password = await requestDocumentPassword({
+        let rememberedFailed = false;
+        password = await getRememberedPassword(path);
+
+        if (password) {
+          try {
+            const doc = await invoke<DocumentState>("open_document", {
+              path,
+              password,
+            });
+            const recentFiles = await addRecentFile(path);
+            set({
+              workspaceId: doc.workspace_id,
+              content: doc.content,
+              savedContent: doc.content,
+              manifest: doc.manifest,
+              filePath: doc.file_path,
+              isEncrypted: doc.is_encrypted ?? true,
+              encryptionPassword: password,
+              isDirty: false,
+              saveStatus: "saved",
+              recentFiles,
+            });
+            return recentFiles;
+          } catch {
+            await forgetRememberedPassword(path);
+            password = null;
+            rememberedFailed = true;
+          }
+        }
+
+        const promptResult = await requestDocumentPassword({
           title: "打开加密文档",
-          description: "该 MDX 文档已加密，请输入密码后解密并打开。",
+          description: rememberedFailed
+            ? "已保存的密码无效或文件已损坏，请重新输入密码。"
+            : "该 MDX 文档已加密，请输入密码后解密并打开。",
           submitLabel: "解密并打开",
+          allowRemember: true,
+          documentPath: path,
         });
-        if (!password) {
+        if (!promptResult.password) {
           throw new Error("已取消打开");
+        }
+        password = promptResult.password;
+        if (promptResult.remember) {
+          await setRememberedPassword(path, password);
+        } else {
+          await forgetRememberedPassword(path);
         }
       }
     }
@@ -162,8 +204,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       saveStatus: "saved",
       recentFiles,
     });
-    const { ffmpegPath } = useSettingsStore.getState();
-    void prewarmDocumentMedia(doc.workspace_id, doc.content, ffmpegPath);
     return recentFiles;
   },
 
@@ -190,14 +230,30 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       let savePassword = encryptionPassword;
       if (isEncrypted && !path && !savePassword) {
-        savePassword = await requestDocumentPassword({
-          title: "保存加密文档",
-          description: "请输入密码以保存加密 MDX 文档。",
-          submitLabel: "保存",
-        });
+        const currentPath = filePath;
+        if (currentPath) {
+          savePassword = await getRememberedPassword(currentPath);
+        }
         if (!savePassword) {
-          set({ saveStatus: "dirty" });
-          return null;
+          const promptResult = await requestDocumentPassword({
+            title: "保存加密文档",
+            description: "请输入密码以保存加密 MDX 文档。",
+            submitLabel: "保存",
+            allowRemember: Boolean(currentPath),
+            documentPath: currentPath ?? undefined,
+          });
+          if (!promptResult.password) {
+            set({ saveStatus: "dirty" });
+            return null;
+          }
+          savePassword = promptResult.password;
+          if (currentPath) {
+            if (promptResult.remember) {
+              await setRememberedPassword(currentPath, savePassword);
+            } else {
+              await forgetRememberedPassword(currentPath);
+            }
+          }
         }
         set({ encryptionPassword: savePassword });
       }
@@ -329,7 +385,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (workspaceId) {
       await invoke("close_document", { workspaceId });
     }
-    cancelMediaPrewarm();
     clearAssetCache();
     set({
       workspaceId: null,

@@ -3,11 +3,20 @@ export interface PasswordPromptOptions {
   description?: string;
   confirm?: boolean;
   submitLabel?: string;
+  /** 显示「记住密码」选项（仅解密场景） */
+  allowRemember?: boolean;
+  /** 用于记住密码的文件路径 */
+  documentPath?: string;
+}
+
+export interface PasswordPromptResult {
+  password: string | null;
+  remember: boolean;
 }
 
 interface PendingPasswordPrompt {
   options: PasswordPromptOptions;
-  resolve: (password: string | null) => void;
+  resolve: (result: PasswordPromptResult) => void;
 }
 
 let pending: PendingPasswordPrompt | null = null;
@@ -30,15 +39,15 @@ export function getPasswordPromptPending(): PendingPasswordPrompt | null {
 
 export function requestDocumentPassword(
   options: PasswordPromptOptions,
-): Promise<string | null> {
+): Promise<PasswordPromptResult> {
   return new Promise((resolve) => {
     pending = { options, resolve };
     notify();
   });
 }
 
-export function submitPasswordPrompt(password: string | null): void {
-  pending?.resolve(password);
+export function submitPasswordPrompt(password: string | null, remember = false): void {
+  pending?.resolve({ password, remember });
   pending = null;
   notify();
 }

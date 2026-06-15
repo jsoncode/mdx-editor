@@ -304,20 +304,111 @@ fn build_ffmpeg_command(app: &AppHandle, user_path: Option<&str>) -> AppResult<C
 fn output_extension(source_ext: &str) -> &'static str {
     if is_video_ext(source_ext) {
         "mp4"
-    } else {
+    } else if is_audio_ext(source_ext) {
         "m4a"
+    } else {
+        // 未识别的容器默认转为 MP4，FFmpeg 可处理纯音频流
+        "mp4"
     }
 }
 
-fn run_ffmpeg_transcode(
+pub fn target_extension(source_ext: &str) -> &'static str {
+    output_extension(source_ext)
+}
+
+fn ffprobe_executable(ffmpeg_executable: &Path) -> PathBuf {
+    let file_name = if cfg!(windows) {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    };
+    ffmpeg_executable
+        .parent()
+        .map(|dir| dir.join(file_name))
+        .unwrap_or_else(|| PathBuf::from(file_name))
+}
+
+pub fn probe_media_duration(
+    app: &AppHandle,
+    user_path: Option<&str>,
+    source: &Path,
+) -> Option<f64> {
+    let (_, ffmpeg_path) = locate_ffmpeg(app, user_path).ok()?;
+    let ffprobe = ffprobe_executable(&ffmpeg_path);
+    if !ffprobe.is_file() {
+        return None;
+    }
+    let mut cmd = Command::new(&ffprobe);
+    prepare_ffmpeg_command(&mut cmd, &ffprobe);
+    cmd.args([
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+    ])
+    .arg(source)
+    .stdin(Stdio::null())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null());
+    let output = cmd.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|value| *value > 0.0)
+}
+
+fn parse_ffmpeg_timestamp(raw: &str) -> Option<f64> {
+    let parts: Vec<&str> = raw.split(':').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let hours: f64 = parts[0].parse().ok()?;
+    let minutes: f64 = parts[1].parse().ok()?;
+    let seconds: f64 = parts[2].parse().ok()?;
+    Some(hours * 3600.0 + minutes * 60.0 + seconds)
+}
+
+fn parse_ffmpeg_time_seconds(line: &str) -> Option<f64> {
+    let marker = "time=";
+    let idx = line.find(marker)?;
+    let rest = line[idx + marker.len()..].trim();
+    let token = rest.split_whitespace().next()?;
+    parse_ffmpeg_timestamp(token)
+}
+
+pub struct TranscodeProgressUpdate {
+    pub percent: Option<u8>,
+    pub message: String,
+}
+
+pub fn transcode_media_to_file(
     app: &AppHandle,
     user_path: Option<&str>,
     source: &Path,
     output: &Path,
     source_ext: &str,
+    mut on_progress: impl FnMut(TranscodeProgressUpdate),
 ) -> AppResult<()> {
+    on_progress(TranscodeProgressUpdate {
+        percent: None,
+        message: "正在分析媒体…".to_string(),
+    });
+
+    let duration = probe_media_duration(app, user_path, source);
+
+    on_progress(TranscodeProgressUpdate {
+        percent: Some(0),
+        message: "正在转码…".to_string(),
+    });
+
     let mut cmd = build_ffmpeg_command(app, user_path)?;
-    cmd.args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
+    cmd.args(["-hide_banner", "-loglevel", "info", "-y", "-i"])
         .arg(source)
         .arg("-threads")
         .arg("0");
@@ -339,28 +430,57 @@ fn run_ffmpeg_transcode(
         cmd.args(["-vn", "-c:a", "aac", "-b:a", "192k"]);
     }
 
-    cmd.args([
-        "-movflags",
-        "+faststart",
-    ])
-    .arg(output)
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::piped());
+    cmd.args(["-movflags", "+faststart"])
+        .arg(output)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
 
-    let result = cmd.output().map_err(AppError::Io)?;
-    if !result.status.success() {
-        let stderr = String::from_utf8_lossy(&result.stderr);
-        let message = format!("FFmpeg 转码失败: {}", stderr.trim());
-        crate::diagnostics::log("rust", "error", "ffmpeg_transcode_failed", &message);
-        return Err(AppError::Other(message));
+    let mut child = cmd.spawn().map_err(AppError::Io)?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| AppError::Other("无法读取 FFmpeg 输出".to_string()))?;
+
+    let reader = std::io::BufReader::new(stderr);
+    use std::io::BufRead;
+    for line in reader.lines() {
+        let line = line.map_err(AppError::Io)?;
+        if let Some(current) = parse_ffmpeg_time_seconds(&line) {
+            let percent = duration.map(|total| {
+                ((current / total) * 100.0).clamp(0.0, 99.0) as u8
+            });
+            on_progress(TranscodeProgressUpdate {
+                percent,
+                message: "正在转码…".to_string(),
+            });
+        }
+    }
+
+    let status = child.wait().map_err(AppError::Io)?;
+    if !status.success() {
+        return Err(AppError::Other("FFmpeg 转码失败".to_string()));
     }
 
     if !output.is_file() {
-        return Err(AppError::Other("FFmpeg 未生成预览文件".to_string()));
+        return Err(AppError::Other("FFmpeg 未生成输出文件".to_string()));
     }
 
+    on_progress(TranscodeProgressUpdate {
+        percent: Some(100),
+        message: "转码完成".to_string(),
+    });
     Ok(())
+}
+
+fn run_ffmpeg_transcode(
+    app: &AppHandle,
+    user_path: Option<&str>,
+    source: &Path,
+    output: &Path,
+    source_ext: &str,
+) -> AppResult<()> {
+    transcode_media_to_file(app, user_path, source, output, source_ext, |_| {})
 }
 
 pub fn resolve_preview_path(

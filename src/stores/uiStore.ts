@@ -1,5 +1,6 @@
 import { message } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
+import { flushEditorContentToStore } from "../lib/editorContent";
 import { useDocumentStore } from "./documentStore";
 
 export type AppView = "welcome" | "editor" | "recent" | "settings" | "history";
@@ -51,6 +52,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
     const { pendingSwitch } = get();
     if (pendingSwitch) return;
 
+    flushEditorContentToStore();
     const isDirty = useDocumentStore.getState().isDirty;
     if (!isDirty) {
       void action();

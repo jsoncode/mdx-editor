@@ -11,6 +11,31 @@ const IMAGE_EXTENSIONS = new Set([
   "tiff",
 ]);
 
+/** 与 Rust `is_blocked_non_media_ext` 保持一致 */
+const BLOCKED_NON_MEDIA_EXTENSIONS = new Set([
+  "md",
+  "mdx",
+  "txt",
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "zip",
+  "rar",
+  "7z",
+  "exe",
+  "dll",
+  "html",
+  "htm",
+  "css",
+  "js",
+  "json",
+  "xml",
+]);
+
 const VIDEO_EXTENSIONS = new Set([
   "mp4",
   "webm",
@@ -43,6 +68,53 @@ const AUDIO_EXTENSIONS = new Set([
 
 export const AUDIO_INSERT_EXTENSIONS = [...AUDIO_EXTENSIONS];
 
+export const VIDEO_INSERT_EXTENSIONS = [...VIDEO_EXTENSIONS];
+
+const COMMON_MEDIA_EXTENSIONS = [
+  ...new Set([...VIDEO_INSERT_EXTENSIONS, ...AUDIO_INSERT_EXTENSIONS]),
+];
+
+export const MEDIA_INSERT_OPEN_FILTERS: { name: string; extensions: string[] }[] = [
+  { name: "常见音视频", extensions: COMMON_MEDIA_EXTENSIONS },
+  { name: "所有文件", extensions: ["*"] },
+];
+
+export const VIDEO_INSERT_OPEN_FILTERS: { name: string; extensions: string[] }[] = [
+  { name: "常见视频", extensions: VIDEO_INSERT_EXTENSIONS },
+  { name: "所有文件", extensions: ["*"] },
+];
+
+export const AUDIO_INSERT_OPEN_FILTERS: { name: string; extensions: string[] }[] = [
+  { name: "常见音频", extensions: AUDIO_INSERT_EXTENSIONS },
+  { name: "所有文件", extensions: ["*"] },
+];
+
+export const IMAGE_INSERT_EXTENSIONS = [...IMAGE_EXTENSIONS];
+
+export const IMAGE_INSERT_OPEN_FILTERS: { name: string; extensions: string[] }[] = [
+  { name: "常见图片", extensions: IMAGE_INSERT_EXTENSIONS },
+  { name: "所有文件", extensions: ["*"] },
+];
+
+export const ATTACHMENT_INSERT_EXTENSIONS = [
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "zip",
+  "rar",
+  "7z",
+  "txt",
+];
+
+export const ATTACHMENT_INSERT_OPEN_FILTERS: { name: string; extensions: string[] }[] = [
+  { name: "常见附件", extensions: ATTACHMENT_INSERT_EXTENSIONS },
+  { name: "所有文件", extensions: ["*"] },
+];
+
 export function extensionFromName(name: string): string {
   const dot = name.lastIndexOf(".");
   if (dot === -1) return "";
@@ -71,6 +143,14 @@ export function isAudioExtension(ext: string): boolean {
   return AUDIO_EXTENSIONS.has(ext);
 }
 
+export function isImageExtension(ext: string): boolean {
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
+export function isBlockedNonMediaExtension(ext: string): boolean {
+  return BLOCKED_NON_MEDIA_EXTENSIONS.has(ext);
+}
+
 /** 浏览器 / WebView 可直接播放，无需 FFmpeg 转码 */
 export function isDirectPlayable(ext: string): boolean {
   return (
@@ -90,8 +170,28 @@ export function isDirectPlayable(ext: string): boolean {
 
 export function needsMediaTranscode(path: string): boolean {
   const ext = extensionFromPath(path);
-  if (!isAudioExtension(ext) && !isVideoExtension(ext)) return false;
-  return !isDirectPlayable(ext);
+  if (isDirectPlayable(ext) || isImageExtension(ext) || isBlockedNonMediaExtension(ext)) {
+    return false;
+  }
+  return true;
+}
+
+/** 转码后的目标扩展名（与 Rust 端一致） */
+export function transcodeTargetExtension(path: string): string {
+  const ext = extensionFromPath(path);
+  if (isVideoExtension(ext)) return "mp4";
+  if (isAudioExtension(ext)) return "m4a";
+  // 未列入清单的容器/编码，与 Rust 端一致默认转为 MP4
+  return "mp4";
+}
+
+/** 如 WMA → M4A，用于转码进度展示 */
+export function describeTranscodeFormats(path: string): string {
+  const source = extensionFromPath(path);
+  if (!source) return "";
+  const target = transcodeTargetExtension(path);
+  if (source === target) return source.toUpperCase();
+  return `${source.toUpperCase()} → ${target.toUpperCase()}`;
 }
 
 export function audioMimeType(ext: string): string | undefined {

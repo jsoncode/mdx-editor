@@ -3,10 +3,10 @@ import { useWelcomeActions } from "../hooks/useWelcomeActions";
 import { formatRecentTime, getFileName, getRecentFileEntries } from "../lib/recentFiles";
 import { getRecentVaults, removeRecentVault } from "../lib/vault";
 import { getVaultName } from "../types/vault";
-import type { RecentFileEntry } from "../types/recent";
+import { useDocumentStore } from "../stores/documentStore";
 
 export function WelcomePage() {
-  const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([]);
+  const recentFiles = useDocumentStore((s) => s.recentFiles).slice(0, 8);
   const [recentVaults, setRecentVaults] = useState<string[]>([]);
   const [newWorkspaceName, setNewWorkspaceName] = useState("MDX 工作区");
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
@@ -24,7 +24,7 @@ export function WelcomePage() {
   useEffect(() => {
     void (async () => {
       const [files, vaults] = await Promise.all([getRecentFileEntries(), getRecentVaults()]);
-      setRecentFiles(files.slice(0, 8));
+      useDocumentStore.getState().setRecentFiles(files);
       setRecentVaults(vaults.slice(0, 6));
     })();
   }, []);
@@ -150,6 +150,9 @@ export function WelcomePage() {
                   <li key={file.path}>
                     <button type="button" className="welcome-recent-item" onClick={() => void openFile(file.path)}>
                       <span className="welcome-recent-name">{getFileName(file.path)}</span>
+                      <span className="welcome-recent-path" title={file.path}>
+                        {file.path}
+                      </span>
                       <span className="welcome-recent-meta">{formatRecentTime(file.openedAt)}</span>
                     </button>
                   </li>

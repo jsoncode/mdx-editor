@@ -1,7 +1,12 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { message, open } from "@tauri-apps/plugin-dialog";
-import { getFileName } from "../lib/recentFiles";
+import { getFileName, removeRecentFile } from "../lib/recentFiles";
 import { MARKDOWN_DOCUMENT_OPEN_FILTERS } from "../lib/documentPaths";
+import {
+  formatDocumentOpenError,
+  isDocumentNotFoundError,
+} from "../lib/documentErrors";
+import { promptRemoveMissingRecentDocument } from "../lib/recentDocumentPrompt";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
@@ -81,7 +86,17 @@ export function useWelcomeActions() {
         await updateTitle(path);
         enterEditor();
       } catch (error) {
-        await message(String(error), { title: "打开失败", kind: "error" });
+        if (isDocumentNotFoundError(error)) {
+          const remove = await promptRemoveMissingRecentDocument(path, error);
+          if (remove) {
+            setRecentFiles(await removeRecentFile(path));
+          }
+          return;
+        }
+        await message(formatDocumentOpenError(path, error), {
+          title: "无法打开文档",
+          kind: "warning",
+        });
       }
       return;
     }
@@ -99,7 +114,10 @@ export function useWelcomeActions() {
       await updateTitle(selected);
       enterEditor();
     } catch (error) {
-      await message(String(error), { title: "打开失败", kind: "error" });
+      await message(formatDocumentOpenError(selected, error), {
+        title: "无法打开文档",
+        kind: "error",
+      });
     }
   };
 

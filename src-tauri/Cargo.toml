@@ -1,6 +1,6 @@
 [package]
 name = "mdx-editor"
-version = "0.1.4"
+version = "0.1.6"
 description = "MDX Desktop Document Editor"
 authors = ["jsoncode"]
 license = "Apache-2.0"
