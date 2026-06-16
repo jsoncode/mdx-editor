@@ -27,18 +27,41 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install WiX Toolset
+        run: choco install wixtoolset -y --no-progress
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish release
-        uses: tauri-apps/tauri-action@v0.5.20
+      - name: Build all package variants
+        run: npm run pack:ci
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          projectPath: src-tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: MDX Editor ${{ github.ref_name }}
-          releaseBody: Windows NSIS installer for MDX Editor ${{ github.ref_name }}.
-          releaseDraft: false
+          name: MDX Editor ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
           prerelease: false
-          args: --target x86_64-pc-windows-msvc
+          generate_release_notes: true
+          body: |
+            Windows 发布包（${{ github.ref_name }}）：
+
+            **standard/** — 默认安装包（不含 FFmpeg）
+            - `mdx-editor-portable.exe` — 绿色便携版
+            - `*-setup.exe` — NSIS 安装程序
+            - `*.msi` — MSI 安装包
+
+            **with-ffmpeg/** — 内置 FFmpeg 版本（体积更大，开箱可转码）
+            - 同上三种格式
+
+            若系统 PATH 中已有 FFmpeg，推荐使用 standard 版本。
+          files: |
+            release-artifacts/**/*

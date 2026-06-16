@@ -1,7 +1,7 @@
 {
   "name": "mdx-editor",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.11",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
@@ -19,7 +19,8 @@
     "pack:ffmpeg:exe": "node scripts/pack.mjs --with-ffmpeg exe",
     "pack:ffmpeg:nsis": "node scripts/pack.mjs --with-ffmpeg nsis",
     "pack:ffmpeg:msi": "node scripts/pack.mjs --with-ffmpeg msi",
-    "pack:ffmpeg:all": "node scripts/pack.mjs --with-ffmpeg all"
+    "pack:ffmpeg:all": "node scripts/pack.mjs --with-ffmpeg all",
+    "pack:ci": "node scripts/pack-ci.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

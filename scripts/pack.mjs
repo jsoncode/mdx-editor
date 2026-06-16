@@ -78,9 +78,10 @@ MDX Editor 打包类型:
 
 function parseArgs(argv) {
   const withFfmpeg = argv.includes("--with-ffmpeg");
-  const filtered = argv.filter((arg) => arg !== "--with-ffmpeg");
+  const isCi = process.env.CI === "true" || argv.includes("--ci");
+  const filtered = argv.filter((arg) => arg !== "--with-ffmpeg" && arg !== "--ci");
   const typeArg = filtered[2];
-  return { withFfmpeg, typeArg };
+  return { withFfmpeg, isCi, typeArg };
 }
 
 function resolveType(raw) {
@@ -165,12 +166,17 @@ function runTauriBuild(type, withFfmpeg) {
 }
 
 async function main() {
-  const { withFfmpeg, typeArg } = parseArgs(process.argv);
+  const { withFfmpeg, isCi, typeArg } = parseArgs(process.argv);
   const resolved = resolveType(typeArg);
 
   if (resolved === "help") {
     printHelp();
     process.exit(0);
+  }
+
+  if (!resolved && isCi) {
+    console.error("CI 模式需要指定打包类型: exe | nsis | msi | all");
+    process.exit(1);
   }
 
   const selectedType = resolved ?? (await promptType());
