@@ -271,7 +271,16 @@ pub fn is_video_ext(ext: &str) -> bool {
 pub fn is_audio_ext(ext: &str) -> bool {
     matches!(
         ext,
-        "mp3" | "wav" | "ogg" | "oga" | "opus" | "flac" | "aac" | "m4a" | "weba" | "aiff" | "aif" | "wma"
+        // 常见有损
+        "mp3" | "aac" | "m4a" | "wma" | "ogg" | "oga" | "opus" | "weba" | "amr" | "3ga" | "ra"
+            // 常见无损 / PCM
+            | "wav" | "flac" | "aiff" | "aif" | "alac" | "caf" | "au" | "snd" | "voc"
+            // DSD / 高解析
+            | "dsf" | "dff"
+            // 其他无损压缩
+            | "ape" | "mac" | "tta" | "wv" | "tak" | "ofr" | "ofs" | "shn" | "mpc" | "mpp"
+            // 环绕声 / 纯音频轨
+            | "ac3" | "eac3" | "dts" | "dtshd" | "spx"
     )
 }
 

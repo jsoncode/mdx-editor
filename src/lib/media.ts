@@ -59,19 +59,87 @@ const VIDEO_EXTENSIONS = new Set([
 ]);
 
 const AUDIO_EXTENSIONS = new Set([
+  // 常见有损
   "mp3",
-  "wav",
+  "aac",
+  "m4a",
+  "wma",
   "ogg",
   "oga",
   "opus",
+  "weba",
+  "amr",
+  "3ga",
+  "ra",
+  // 常见无损 / PCM
+  "wav",
+  "flac",
+  "aiff",
+  "aif",
+  "alac",
+  "caf",
+  "au",
+  "snd",
+  "voc",
+  // DSD / 高解析
+  "dsf",
+  "dff",
+  // 其他无损压缩
+  "ape",
+  "mac",
+  "tta",
+  "wv",
+  "tak",
+  "ofr",
+  "ofs",
+  "shn",
+  "mpc",
+  "mpp",
+  // 环绕声 / 纯音频轨
+  "ac3",
+  "eac3",
+  "dts",
+  "dtshd",
+  "spx",
+]);
+
+/** 文件选择器「无损与高解析」分组（均为 AUDIO_EXTENSIONS 子集） */
+export const LOSSLESS_AUDIO_INSERT_EXTENSIONS = [
+  "dsf",
+  "dff",
+  "flac",
+  "ape",
+  "tta",
+  "wv",
+  "alac",
+  "tak",
+  "ofr",
+  "ofs",
+  "shn",
+  "mpc",
+  "aiff",
+  "aif",
+  "wav",
+  "ac3",
+  "eac3",
+  "dts",
+  "dtshd",
+  "caf",
+];
+
+const COMMON_AUDIO_INSERT_EXTENSIONS = [
+  "mp3",
+  "wav",
   "flac",
   "aac",
   "m4a",
-  "weba",
-  "aiff",
-  "aif",
+  "ogg",
+  "oga",
+  "opus",
   "wma",
-]);
+  "amr",
+  "weba",
+];
 
 export const AUDIO_INSERT_EXTENSIONS = [...AUDIO_EXTENSIONS];
 
@@ -92,7 +160,8 @@ export const VIDEO_INSERT_OPEN_FILTERS: { name: string; extensions: string[] }[]
 ];
 
 export const AUDIO_INSERT_OPEN_FILTERS: { name: string; extensions: string[] }[] = [
-  { name: "常见音频", extensions: AUDIO_INSERT_EXTENSIONS },
+  { name: "常见音频", extensions: COMMON_AUDIO_INSERT_EXTENSIONS },
+  { name: "无损与高解析", extensions: LOSSLESS_AUDIO_INSERT_EXTENSIONS },
   { name: "所有文件", extensions: ["*"] },
 ];
 

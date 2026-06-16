@@ -331,8 +331,28 @@ fn ffprobe_executable(ffmpeg_executable: &Path) -> PathBuf {
 fn needs_deep_probe(source_ext: &str) -> bool {
     matches!(
         source_ext,
-        "vob" | "mpg" | "mpeg" | "ts" | "m2ts" | "mts" | "rmvb" | "asf"
+        "vob" | "mpg" | "mpeg" | "ts" | "m2ts" | "mts" | "rmvb" | "asf" | "dsf" | "dff"
     )
+}
+
+fn is_dsd_ext(ext: &str) -> bool {
+    matches!(ext, "dsf" | "dff")
+}
+
+fn is_lossless_audio_ext(ext: &str) -> bool {
+    matches!(
+        ext,
+        "wav" | "flac" | "aiff" | "aif" | "alac" | "dsf" | "dff" | "ape" | "mac" | "tta" | "wv"
+            | "tak" | "ofr" | "ofs" | "shn" | "mpc" | "mpp" | "caf"
+    )
+}
+
+fn audio_transcode_bitrate(source_ext: &str) -> &'static str {
+    if is_lossless_audio_ext(source_ext) {
+        "256k"
+    } else {
+        "192k"
+    }
 }
 
 pub fn probe_has_video_stream(
@@ -466,6 +486,9 @@ pub fn transcode_media_to_file(
     if needs_deep_probe(source_ext) {
         cmd.args(["-probesize", "100M", "-analyzeduration", "100M"]);
     }
+    if is_dsd_ext(source_ext) {
+        cmd.args(["-fflags", "+genpts+igndts"]);
+    }
     cmd.arg("-i").arg(source).arg("-threads").arg("0");
 
     if treat_as_video {
@@ -488,7 +511,12 @@ pub fn transcode_media_to_file(
             "128k",
         ]);
     } else {
-        cmd.args(["-vn", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "192k"]);
+        let bitrate = audio_transcode_bitrate(source_ext);
+        cmd.args(["-vn", "-map", "0:a:0?"]);
+        if is_dsd_ext(source_ext) {
+            cmd.arg("-ar").arg("44100");
+        }
+        cmd.args(["-c:a", "aac", "-b:a", bitrate]);
     }
 
     cmd.args(["-movflags", "+faststart"])
