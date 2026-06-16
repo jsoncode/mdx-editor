@@ -139,6 +139,20 @@ export async function renameVaultItem(
   });
 }
 
+export async function moveVaultItem(
+  vaultPath: string,
+  relativePath: string,
+  targetFolderRelative: string,
+  isFolder: boolean,
+): Promise<string> {
+  return invoke<string>("move_vault_item_cmd", {
+    vaultPath,
+    relativePath,
+    targetFolderRelative,
+    isFolder,
+  });
+}
+
 export async function revealVaultItem(itemPath: string): Promise<void> {
   await invoke("reveal_vault_item_cmd", { itemPath });
 }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter};
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::git_sync::{self, push_in_process, GitPullResult, GitSyncConfig, GitSyncStatus};
 
 fn is_git_sync_configured(config: &GitSyncConfig) -> bool {
@@ -12,7 +12,7 @@ fn is_git_sync_configured(config: &GitSyncConfig) -> bool {
 }
 
 #[tauri::command]
-pub fn git_sync_pull(vault_path: String, config: GitSyncConfig) -> AppResult<GitPullResult> {
+pub async fn git_sync_pull(vault_path: String, config: GitSyncConfig) -> AppResult<GitPullResult> {
     if !is_git_sync_configured(&config) {
         return Ok(GitPullResult {
             updated: false,
@@ -20,7 +20,11 @@ pub fn git_sync_pull(vault_path: String, config: GitSyncConfig) -> AppResult<Git
             has_conflicts: false,
         });
     }
-    git_sync::pull(PathBuf::from(vault_path).as_path(), &config)
+
+    let path = PathBuf::from(vault_path);
+    tauri::async_runtime::spawn_blocking(move || git_sync::pull(path.as_path(), &config))
+        .await
+        .map_err(|error| AppError::Other(format!("Git 拉取失败: {error}")))?
 }
 
 #[tauri::command]

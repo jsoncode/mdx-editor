@@ -631,25 +631,42 @@ body,
   margin: 0;
 }
 
-.vault-tree-folder-row {
+.vault-tree-row {
   display: flex;
   align-items: stretch;
   min-height: 28px;
+  border-radius: 4px;
+  cursor: grab;
+  touch-action: none;
 }
 
-.vault-tree-toggle-spacer {
-  flex-shrink: 0;
+.vault-tree-row.dragging {
+  opacity: 0.28;
+}
+
+.vault-tree-row.dragging .vault-tree-body {
+  background: transparent !important;
+}
+
+.vault-tree-chevron-slot {
+  flex: 0 0 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vault-tree-chevron-placeholder {
+  display: block;
   width: 22px;
   height: 22px;
 }
 
-.vault-tree-toggle {
-  flex-shrink: 0;
+.vault-tree-chevron {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 22px;
-  min-height: 28px;
+  height: 22px;
   margin: 0;
   padding: 0;
   border: none;
@@ -659,23 +676,22 @@ body,
   cursor: pointer;
 }
 
-.vault-tree-toggle:hover {
+.vault-tree-chevron:hover {
   background: rgba(43, 87, 154, 0.1);
   color: #2b579a;
 }
 
-.vault-tree-toggle svg {
+.vault-tree-chevron svg {
   width: 14px;
   height: 14px;
   transition: transform 0.15s;
 }
 
-.vault-tree-toggle svg.expanded {
+.vault-tree-chevron svg.expanded {
   transform: rotate(90deg);
 }
 
-.vault-tree-folder,
-.vault-tree-file {
+.vault-tree-body {
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -691,27 +707,104 @@ body,
   text-align: left;
 }
 
-.vault-tree-folder svg,
-.vault-tree-file svg {
+.vault-tree-icon-slot {
+  flex: 0 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vault-tree-icon-slot svg {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
   color: #7a8699;
 }
 
-.vault-tree-folder.selected {
+.vault-tree-row.vault-tree-folder.selected .vault-tree-body {
   background: rgba(43, 87, 154, 0.08);
+  border-radius: 4px;
 }
 
-.vault-tree-file:hover,
-.vault-tree-folder:hover {
+.vault-tree-row:hover .vault-tree-body {
   background: rgba(43, 87, 154, 0.06);
+  border-radius: 4px;
 }
 
-.vault-tree-file.active {
+.vault-tree-row.vault-tree-file.active .vault-tree-body {
   background: rgba(43, 87, 154, 0.14);
   color: #2b579a;
   font-weight: 600;
+  border-radius: 4px;
+}
+
+.vault-tree-row.vault-drop-hover .vault-tree-body {
+  background: rgba(43, 87, 154, 0.06);
+  border-radius: 4px;
+}
+
+.workspace-sidebar-tree.is-vault-dragging {
+  user-select: none;
+}
+
+.workspace-sidebar-tree.vault-drop-hover-root {
+  background: rgba(43, 87, 154, 0.03);
+}
+
+.vault-drag-ghost {
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: min(280px, 70vw);
+  padding: 0.25rem 0.55rem 0.25rem 0.35rem;
+  border: 1px solid rgba(43, 87, 154, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(43, 87, 154, 0.18);
+  color: #2b579a;
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+  transform: translate(-4px, -4px);
+}
+
+.vault-drag-ghost-icon {
+  flex: 0 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7a8699;
+}
+
+.vault-drag-ghost-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.vault-drag-ghost-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-drop-line {
+  position: fixed;
+  z-index: 1199;
+  height: 0;
+  border-top: 2px dashed #2b579a;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+body.vault-tree-dnd-active {
+  cursor: grabbing !important;
+}
+
+body.vault-tree-dnd-active .vault-drag-ghost,
+body.vault-tree-dnd-active .vault-drop-line {
+  cursor: grabbing !important;
 }
 
 .vault-tree-label {

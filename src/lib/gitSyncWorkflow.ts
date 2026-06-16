@@ -8,12 +8,36 @@ import {
 import { diag } from "./diagnosticLog";
 import { useSettingsStore } from "../stores/settingsStore";
 
-export async function pullVaultBeforeAccess(vaultPath: string): Promise<void> {
+const GIT_PULL_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label}超时（${Math.round(timeoutMs / 1000)} 秒），已跳过`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function runVaultGitPull(vaultPath: string): Promise<void> {
   const { gitSync } = useSettingsStore.getState();
   if (!isGitSyncConfigured(gitSync)) return;
 
   try {
-    const result = await pullVaultGit(vaultPath, gitSync);
+    const result = await withTimeout(
+      pullVaultGit(vaultPath, gitSync),
+      GIT_PULL_TIMEOUT_MS,
+      "Git 拉取",
+    );
     if (result.hasConflicts) {
       await message(result.message, { title: "Git 同步", kind: "warning" });
       return;
@@ -22,8 +46,46 @@ export async function pullVaultBeforeAccess(vaultPath: string): Promise<void> {
       console.info("[git]", result.message);
     }
   } catch (error) {
-    await message(String(error), { title: "Git 拉取失败", kind: "warning" });
+    const detail = error instanceof Error ? error.message : String(error);
+    diag("git", "pull_failed", { vaultPath, error: detail }, "warn");
+    await message(detail, { title: "Git 拉取失败", kind: "warning" });
   }
+}
+
+/** 打开工作区前拉取远程（带超时，可能阻塞数秒） */
+export async function pullVaultBeforeAccess(vaultPath: string): Promise<void> {
+  await runVaultGitPull(vaultPath);
+}
+
+/** 后台拉取远程，不阻塞 UI；完成后调用 onSynced */
+export function pullVaultInBackground(
+  vaultPath: string,
+  onSynced?: () => void | Promise<void>,
+): void {
+  const { gitSync } = useSettingsStore.getState();
+  if (!isGitSyncConfigured(gitSync)) return;
+
+  void (async () => {
+    try {
+      const result = await withTimeout(
+        pullVaultGit(vaultPath, gitSync),
+        GIT_PULL_TIMEOUT_MS,
+        "Git 拉取",
+      );
+      if (result.hasConflicts) {
+        await message(result.message, { title: "Git 同步", kind: "warning" });
+        return;
+      }
+      if (result.updated) {
+        console.info("[git]", result.message);
+        await onSynced?.();
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      diag("git", "pull_background_failed", { vaultPath, error: detail }, "warn");
+      console.warn("[git] 后台拉取失败:", detail);
+    }
+  })();
 }
 
 export function pushVaultAfterSave(vaultPath: string, filePath: string): void {

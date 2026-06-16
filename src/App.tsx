@@ -114,7 +114,8 @@ function App() {
     void (async () => {
       const recent = await getRecentFileEntries();
       setRecentFiles(recent);
-      await Promise.all([initializeVault(), initializeSettings()]);
+      await initializeSettings();
+      await initializeVault();
 
       const launchPath = await invoke<string | null>("take_launch_file");
       if (launchPath) {

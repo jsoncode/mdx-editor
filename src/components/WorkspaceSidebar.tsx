@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useVaultActions } from "../hooks/useVaultActions";
 import { useVaultTreeMenu } from "../hooks/useVaultTreeMenu";
+import { useVaultTreeDrag } from "../hooks/useVaultTreeDrag";
 import { isPlainMdPath } from "../lib/documentPaths";
 import { useDocumentStore } from "../stores/documentStore";
 import { useVaultStore } from "../stores/vaultStore";
@@ -13,6 +14,7 @@ import {
   type VaultContextMenuItem,
 } from "./VaultContextMenu";
 import { FileTree, VaultCreateFolderInput, VaultEmptyState } from "./FileTree";
+import { VaultTreeDragOverlay } from "./VaultTreeDragOverlay";
 
 export function WorkspaceSidebar() {
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -20,6 +22,7 @@ export function WorkspaceSidebar() {
   const vaultPath = useVaultStore((s) => s.vaultPath);
   const tree = useVaultStore((s) => s.tree);
   const expandedFolders = useVaultStore((s) => s.expandedFolders);
+  const deferredExpandedFolders = useDeferredValue(expandedFolders);
   const selectedFolder = useVaultStore((s) => s.selectedFolder);
   const loading = useVaultStore((s) => s.loading);
   const toggleFolder = useVaultStore((s) => s.toggleFolder);
@@ -39,6 +42,7 @@ export function WorkspaceSidebar() {
   } = useVaultActions();
 
   const treeMenu = useVaultTreeMenu();
+  const treeDrag = useVaultTreeDrag();
 
   const contextMenuItems = useMemo((): VaultContextMenuItem[] => {
     if (!treeMenu.contextMenu) return [];
@@ -163,7 +167,7 @@ export function WorkspaceSidebar() {
 
   const handleTreeBackgroundContextMenu = (event: React.MouseEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest(".vault-tree-item, .vault-tree-file, .vault-tree-folder, .vault-tree-toggle")) {
+    if (target.closest(".vault-tree-item, .vault-tree-row, .vault-tree-body, .vault-tree-chevron")) {
       return;
     }
     treeMenu.openWorkspaceContextMenu(event);
@@ -237,7 +241,11 @@ export function WorkspaceSidebar() {
         </div>
       )}
 
-      <div className="workspace-sidebar-tree" onContextMenu={handleTreeBackgroundContextMenu}>
+      <div
+        className={`workspace-sidebar-tree${treeDrag.dragging ? " is-vault-dragging" : ""}${treeDrag.dropTarget === "" && treeDrag.dropValid ? " vault-drop-hover-root" : ""}`}
+        data-vault-drop-folder=""
+        onContextMenu={handleTreeBackgroundContextMenu}
+      >
         {loading ? (
           <p className="workspace-sidebar-hint">加载中...</p>
         ) : tree.length === 0 ? (
@@ -247,7 +255,7 @@ export function WorkspaceSidebar() {
             vaultPath={vaultPath}
             nodes={tree}
             activePath={filePath}
-            expandedFolders={expandedFolders}
+            expandedFolders={deferredExpandedFolders}
             selectedFolder={selectedFolder}
             onToggleFolder={toggleFolder}
             onSelectFolder={setSelectedFolder}
@@ -261,9 +269,21 @@ export function WorkspaceSidebar() {
                 treeMenu.buildFolderContextTarget(absolutePath, node.name, node.relative_path),
               )
             }
+            dragging={treeDrag.dragging}
+            dropTarget={treeDrag.dropTarget}
+            onPointerDown={treeDrag.handlePointerDown}
+            consumeClickSuppression={treeDrag.consumeClickSuppression}
+            canDropOn={treeDrag.canDropOn}
           />
         )}
       </div>
+
+      <VaultTreeDragOverlay
+        dragging={treeDrag.dragging}
+        pointer={treeDrag.pointer}
+        dropLine={treeDrag.dropLine}
+        dropValid={treeDrag.dropValid}
+      />
 
       {treeMenu.contextMenu && (
         <VaultContextMenu

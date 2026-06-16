@@ -425,6 +425,68 @@ pub fn rename_vault_item(
     Ok(destination.to_string_lossy().to_string())
 }
 
+pub fn move_vault_item(
+    vault_path: &str,
+    relative_path: &str,
+    target_folder_relative: &str,
+    is_folder: bool,
+) -> AppResult<String> {
+    let root = PathBuf::from(vault_path);
+    let source = resolve_vault_child(&root, relative_path)?;
+    if !source.exists() {
+        return Err(AppError::Other("路径不存在".to_string()));
+    }
+
+    let source_rel = relative_path.replace('\\', "/").trim_matches('/').to_string();
+    let target_folder = target_folder_relative
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_string();
+
+    if is_folder {
+        if target_folder == source_rel || target_folder.starts_with(&format!("{source_rel}/")) {
+            return Err(AppError::Other(
+                "不能将文件夹移动到自身或其子目录".to_string(),
+            ));
+        }
+    }
+
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| AppError::Other("Invalid path".to_string()))?;
+
+    let dest_parent = if target_folder.is_empty() {
+        root.clone()
+    } else {
+        let folder = resolve_vault_child(&root, &target_folder)?;
+        if !folder.is_dir() {
+            return Err(AppError::Other("目标文件夹不存在".to_string()));
+        }
+        folder
+    };
+
+    let destination = dest_parent.join(file_name);
+    ensure_within_vault(&root, &destination)?;
+
+    if source == destination {
+        return Ok(destination.to_string_lossy().to_string());
+    }
+
+    if destination.exists() {
+        return Err(AppError::Other(format!(
+            "目标位置已存在「{}」",
+            file_name.to_string_lossy()
+        )));
+    }
+
+    if !is_folder && !is_vault_document_path(&source) {
+        return Err(AppError::Other("只能移动 MDX/Markdown 文档".to_string()));
+    }
+
+    fs::rename(&source, &destination)?;
+    Ok(destination.to_string_lossy().to_string())
+}
+
 pub fn reveal_vault_item(item_path: &str) -> AppResult<()> {
     let target = PathBuf::from(item_path);
     if !target.exists() {

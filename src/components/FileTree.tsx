@@ -1,16 +1,25 @@
-import { useState } from "react";
+import { useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { isVaultFile, isVaultFolder, type VaultTreeNode } from "../types/vault";
+import type { VaultDragPayload } from "../hooks/useVaultTreeDrag";
 
-/** 每层缩进（px） */
 const VAULT_TREE_INDENT = 20;
-/** 根级左侧留白（px） */
 const VAULT_TREE_BASE_PADDING = 8;
 
-function treeRowPadding(depth: number): number {
-  return VAULT_TREE_BASE_PADDING + depth * VAULT_TREE_INDENT;
+function treeRowStyle(depth: number): CSSProperties {
+  return {
+    paddingLeft: `${VAULT_TREE_BASE_PADDING + depth * VAULT_TREE_INDENT}px`,
+  };
 }
 
-interface FileTreeProps {
+export interface VaultTreeDragHandlers {
+  dragging: VaultDragPayload | null;
+  dropTarget: string | null;
+  onPointerDown: (payload: VaultDragPayload, event: PointerEvent) => void;
+  consumeClickSuppression: () => boolean;
+  canDropOn: (payload: VaultDragPayload, targetFolderRelative: string) => boolean;
+}
+
+interface FileTreeProps extends VaultTreeDragHandlers {
   vaultPath: string;
   nodes: VaultTreeNode[];
   depth?: number;
@@ -20,9 +29,9 @@ interface FileTreeProps {
   onToggleFolder: (relativePath: string) => void;
   onSelectFolder: (relativePath: string) => void;
   onOpenFile: (path: string) => void;
-  onFileContextMenu: (event: React.MouseEvent, node: Extract<VaultTreeNode, { kind: "file" }>) => void;
+  onFileContextMenu: (event: MouseEvent, node: Extract<VaultTreeNode, { kind: "file" }>) => void;
   onFolderContextMenu: (
-    event: React.MouseEvent,
+    event: MouseEvent,
     node: Extract<VaultTreeNode, { kind: "folder" }>,
     absolutePath: string,
   ) => void;
@@ -40,6 +49,11 @@ export function FileTree({
   onOpenFile,
   onFileContextMenu,
   onFolderContextMenu,
+  dragging,
+  dropTarget,
+  onPointerDown,
+  consumeClickSuppression,
+  canDropOn,
 }: FileTreeProps) {
   return (
     <ul className="vault-tree" role="tree">
@@ -57,6 +71,11 @@ export function FileTree({
           onOpenFile={onOpenFile}
           onFileContextMenu={onFileContextMenu}
           onFolderContextMenu={onFolderContextMenu}
+          dragging={dragging}
+          dropTarget={dropTarget}
+          onPointerDown={onPointerDown}
+          consumeClickSuppression={consumeClickSuppression}
+          canDropOn={canDropOn}
         />
       ))}
     </ul>
@@ -75,6 +94,11 @@ function FileTreeNodeItem({
   onOpenFile,
   onFileContextMenu,
   onFolderContextMenu,
+  dragging,
+  dropTarget,
+  onPointerDown,
+  consumeClickSuppression,
+  canDropOn,
 }: {
   vaultPath: string;
   node: VaultTreeNode;
@@ -85,30 +109,42 @@ function FileTreeNodeItem({
   onToggleFolder: (relativePath: string) => void;
   onSelectFolder: (relativePath: string) => void;
   onOpenFile: (path: string) => void;
-  onFileContextMenu: (event: React.MouseEvent, node: Extract<VaultTreeNode, { kind: "file" }>) => void;
+  onFileContextMenu: (event: MouseEvent, node: Extract<VaultTreeNode, { kind: "file" }>) => void;
   onFolderContextMenu: (
-    event: React.MouseEvent,
+    event: MouseEvent,
     node: Extract<VaultTreeNode, { kind: "folder" }>,
     absolutePath: string,
   ) => void;
-}) {
+} & VaultTreeDragHandlers) {
   if (isVaultFile(node)) {
     const active = activePath === node.path;
+    const relativePath = getRelativeVaultPath(vaultPath, node.path);
+    const payload: VaultDragPayload = {
+      kind: "file",
+      relativePath,
+      path: node.path,
+      name: node.name,
+    };
+    const isDragging = dragging?.relativePath === relativePath;
+
     return (
       <li className="vault-tree-item" role="none">
-        <button
-          type="button"
-          className={`vault-tree-file${active ? " active" : ""}`}
-          style={{ paddingLeft: `${treeRowPadding(depth)}px` }}
-          onClick={() => onOpenFile(node.path)}
-          onContextMenu={(event) => onFileContextMenu(event, node)}
+        <VaultTreeRow
+          depth={depth}
+          style={treeRowStyle(depth)}
+          className={`vault-tree-file${active ? " active" : ""}${isDragging ? " dragging" : ""}`}
+          onPointerDown={(event) => onPointerDown(payload, event)}
+          chevron={<span className="vault-tree-chevron-placeholder" aria-hidden="true" />}
+          icon={<FileIcon />}
+          label={node.name}
           title={node.path}
           role="treeitem"
-        >
-          <span className="vault-tree-toggle-spacer" aria-hidden="true" />
-          <FileIcon />
-          <span className="vault-tree-label">{node.name}</span>
-        </button>
+          onActivate={() => {
+            if (consumeClickSuppression()) return;
+            onOpenFile(node.path);
+          }}
+          onContextMenu={(event) => onFileContextMenu(event, node)}
+        />
       </li>
     );
   }
@@ -116,37 +152,50 @@ function FileTreeNodeItem({
   const expanded = expandedFolders.has(node.relative_path);
   const selected = selectedFolder === node.relative_path;
   const folderAbsolutePath = joinVaultPath(vaultPath, node.relative_path);
+  const normalizedFolderPath = node.relative_path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const payload: VaultDragPayload = {
+    kind: "folder",
+    relativePath: node.relative_path,
+    path: folderAbsolutePath,
+    name: node.name,
+  };
+  const isDragging = dragging?.relativePath === node.relative_path;
+  const isDropTarget = dropTarget === normalizedFolderPath;
+  const showDropTarget = dragging ? canDropOn(dragging, node.relative_path) : false;
 
   return (
     <li className="vault-tree-item" role="none">
-      <div
-        className="vault-tree-folder-row"
-        style={{ paddingLeft: `${treeRowPadding(depth)}px` }}
-      >
-        <button
-          type="button"
-          className="vault-tree-toggle"
-          aria-label={expanded ? "折叠文件夹" : "展开文件夹"}
-          onClick={() => onToggleFolder(node.relative_path)}
-        >
-          <ChevronIcon expanded={expanded} />
-        </button>
-        <button
-          type="button"
-          className={`vault-tree-folder${selected ? " selected" : ""}`}
-          onClick={() => {
-            onSelectFolder(node.relative_path);
-            if (!expanded) onToggleFolder(node.relative_path);
-          }}
-          onContextMenu={(event) => onFolderContextMenu(event, node, folderAbsolutePath)}
-          title={node.relative_path}
-          role="treeitem"
-          aria-expanded={expanded}
-        >
-          <FolderIcon open={expanded} />
-          <span className="vault-tree-label">{node.name}</span>
-        </button>
-      </div>
+      <VaultTreeRow
+        depth={depth}
+        style={treeRowStyle(depth)}
+        className={`vault-tree-folder${selected ? " selected" : ""}${isDragging ? " dragging" : ""}${isDropTarget && showDropTarget ? " vault-drop-hover" : ""}`}
+        dropFolder={normalizedFolderPath}
+        onPointerDown={(event) => onPointerDown(payload, event)}
+        chevron={
+          <button
+            type="button"
+            className="vault-tree-chevron"
+            aria-label={expanded ? "折叠文件夹" : "展开文件夹"}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFolder(node.relative_path);
+            }}
+          >
+            <ChevronIcon expanded={expanded} />
+          </button>
+        }
+        icon={<FolderIcon open={expanded} />}
+        label={node.name}
+        title={node.relative_path}
+        role="treeitem"
+        ariaExpanded={expanded}
+        onActivate={() => {
+          if (consumeClickSuppression()) return;
+          onSelectFolder(node.relative_path);
+          if (!expanded) onToggleFolder(node.relative_path);
+        }}
+        onContextMenu={(event) => onFolderContextMenu(event, node, folderAbsolutePath)}
+      />
       {expanded && (
         <FileTree
           vaultPath={vaultPath}
@@ -160,10 +209,84 @@ function FileTreeNodeItem({
           onOpenFile={onOpenFile}
           onFileContextMenu={onFileContextMenu}
           onFolderContextMenu={onFolderContextMenu}
+          dragging={dragging}
+          dropTarget={dropTarget}
+          onPointerDown={onPointerDown}
+          consumeClickSuppression={consumeClickSuppression}
+          canDropOn={canDropOn}
         />
       )}
     </li>
   );
+}
+
+function VaultTreeRow({
+  depth,
+  style,
+  className,
+  dropFolder,
+  chevron,
+  icon,
+  label,
+  title,
+  role,
+  ariaExpanded,
+  onActivate,
+  onContextMenu,
+  onPointerDown,
+}: {
+  depth: number;
+  style: CSSProperties;
+  className: string;
+  dropFolder?: string;
+  chevron: ReactNode;
+  icon: ReactNode;
+  label: string;
+  title: string;
+  role: "treeitem";
+  ariaExpanded?: boolean;
+  onActivate: () => void;
+  onContextMenu: (event: MouseEvent) => void;
+  onPointerDown: (event: PointerEvent) => void;
+}) {
+  return (
+    <div
+      className={`vault-tree-row ${className}`.trim()}
+      style={style}
+      data-vault-depth={depth}
+      {...(dropFolder !== undefined ? { "data-vault-drop-folder": dropFolder } : {})}
+      onPointerDown={onPointerDown}
+    >
+      <div className="vault-tree-chevron-slot">{chevron}</div>
+      <div
+        className="vault-tree-body"
+        role={role}
+        tabIndex={0}
+        aria-expanded={ariaExpanded}
+        onClick={onActivate}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onActivate();
+          }
+        }}
+        onContextMenu={onContextMenu}
+        title={title}
+      >
+        <span className="vault-tree-icon-slot">{icon}</span>
+        <span className="vault-tree-label">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function getRelativeVaultPath(vaultPath: string, itemPath: string): string {
+  const normalizedVault = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedItem = itemPath.replace(/\\/g, "/");
+  if (normalizedItem.toLowerCase().startsWith(`${normalizedVault.toLowerCase()}/`)) {
+    return normalizedItem.slice(normalizedVault.length + 1);
+  }
+  return normalizedItem;
 }
 
 function joinVaultPath(vaultPath: string, relativePath: string): string {

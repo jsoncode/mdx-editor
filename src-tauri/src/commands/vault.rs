@@ -1,13 +1,15 @@
 use crate::error::AppError;
 use crate::vault::{
     create_vault_document, create_vault_folder, delete_vault_file, delete_vault_folder,
-    get_vault_item_info, rename_vault_item, reveal_vault_item, scan_vault, unique_document_name,
-    VaultItemInfo, VaultTreeNode,
+    get_vault_item_info, move_vault_item, rename_vault_item, reveal_vault_item, scan_vault,
+    unique_document_name, VaultItemInfo, VaultTreeNode,
 };
 
 #[tauri::command]
-pub fn scan_vault_tree(vault_path: String) -> Result<Vec<VaultTreeNode>, AppError> {
-    scan_vault(&vault_path)
+pub async fn scan_vault_tree(vault_path: String) -> Result<Vec<VaultTreeNode>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || scan_vault(&vault_path))
+        .await
+        .map_err(|error| AppError::Other(format!("扫描工作区失败: {error}")))?
 }
 
 #[tauri::command]
@@ -58,6 +60,21 @@ pub fn rename_vault_item_cmd(
     is_folder: bool,
 ) -> Result<String, AppError> {
     rename_vault_item(&vault_path, &relative_path, &new_name, is_folder)
+}
+
+#[tauri::command]
+pub fn move_vault_item_cmd(
+    vault_path: String,
+    relative_path: String,
+    target_folder_relative: String,
+    is_folder: bool,
+) -> Result<String, AppError> {
+    move_vault_item(
+        &vault_path,
+        &relative_path,
+        &target_folder_relative,
+        is_folder,
+    )
 }
 
 #[tauri::command]

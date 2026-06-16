@@ -14,7 +14,7 @@ import {
   suggestVaultDocumentName,
   collectFolderPaths,
 } from "../lib/vault";
-import { pullVaultBeforeAccess } from "../lib/gitSyncWorkflow";
+import { pullVaultInBackground } from "../lib/gitSyncWorkflow";
 import type { VaultTreeNode } from "../types/vault";
 
 interface VaultStore {
@@ -42,6 +42,20 @@ interface VaultStore {
 
 function normalizeFolderPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+/** 恢复展开状态时上限，避免大树一次性渲染卡死 UI */
+const MAX_RESTORED_EXPANDED_FOLDERS = 64;
+
+function restoreExpandedFolders(saved: string[]): Set<string> {
+  const normalized = saved.map(normalizeFolderPath).filter(Boolean);
+  if (normalized.length <= MAX_RESTORED_EXPANDED_FOLDERS) {
+    return new Set(normalized);
+  }
+  console.warn(
+    `[vault] 已保存 ${normalized.length} 个展开文件夹，超过上限 ${MAX_RESTORED_EXPANDED_FOLDERS}，启动时将全部收起`,
+  );
+  return new Set<string>();
 }
 
 export const useVaultStore = create<VaultStore>((set, get) => ({
@@ -83,11 +97,16 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
       getSidebarOpen(),
     ]);
 
+    const restoredExpanded = restoreExpandedFolders(expanded);
     set({
-      expandedFolders: new Set(expanded),
+      expandedFolders: restoredExpanded,
       sidebarOpen,
       initialized: true,
     });
+
+    if (expanded.length > MAX_RESTORED_EXPANDED_FOLDERS) {
+      void saveExpandedFolders([]);
+    }
 
     if (savedPath) {
       await get().openVault(savedPath);
@@ -95,13 +114,18 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
   },
 
   openVault: async (path) => {
-    set({ loading: true, vaultPath: path });
+    set({ loading: true, vaultPath: path, selectedFolder: "" });
     try {
-      await pullVaultBeforeAccess(path);
       const tree = await scanVaultTree(path);
       await saveVaultPath(path);
       await addRecentVault(path);
       set({ tree, vaultPath: path, loading: false });
+
+      pullVaultInBackground(path, async () => {
+        if (get().vaultPath === path) {
+          await get().refreshTree();
+        }
+      });
     } catch (error) {
       console.error("打开工作区失败:", error);
       await saveVaultPath(null);

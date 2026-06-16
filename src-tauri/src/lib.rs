@@ -122,6 +122,7 @@ pub fn run() {
             commands::delete_vault_file_cmd,
             commands::delete_vault_folder_cmd,
             commands::rename_vault_item_cmd,
+            commands::move_vault_item_cmd,
             commands::reveal_vault_item_cmd,
             commands::insert_asset_from_path,
             commands::insert_asset_from_bytes,
