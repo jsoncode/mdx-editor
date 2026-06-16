@@ -2,6 +2,10 @@ export interface FfmpegStatus {
   available: boolean;
   source?: "user" | "path" | "sidecar" | null;
   path?: string | null;
+  versionLine?: string | null;
+  majorVersion?: number | null;
+  versionSupported?: boolean;
+  versionHint?: string | null;
 }
 
 export function ffmpegSourceLabel(source: string): string {

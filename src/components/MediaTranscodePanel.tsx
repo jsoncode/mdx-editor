@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { describeTranscodeFormats } from "../lib/media";
+import { FfmpegErrorDetails } from "./FfmpegErrorDetails";
 import { useMediaTranscodeStore } from "../stores/mediaTranscodeStore";
 import type { MediaTranscodeJob } from "../types/mediaTranscode";
 
 function phaseLabel(job: MediaTranscodeJob): string {
-  if (job.error) return job.error;
+  if (job.phase === "error") return "";
   if (job.message) return job.message;
   switch (job.phase) {
     case "starting":
@@ -35,7 +36,13 @@ function JobRow({ job }: { job: MediaTranscodeJob }) {
           <span className="media-transcode-job-format">{formatLabel}</span>
         ) : null}
       </div>
-      <p className="media-transcode-job-message">{phaseLabel(job)}</p>
+      <p className="media-transcode-job-message">
+        {job.phase === "error" && job.error ? (
+          <FfmpegErrorDetails message={job.error} className="ffmpeg-error-details media-transcode-error" />
+        ) : (
+          phaseLabel(job)
+        )}
+      </p>
       {percent !== null || job.done ? (
         <div className="media-transcode-progress-track" aria-hidden="true">
           <div

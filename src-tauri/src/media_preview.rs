@@ -247,6 +247,314 @@ pub struct FfmpegStatus {
     pub available: bool,
     pub source: Option<String>,
     pub path: Option<String>,
+    pub version_line: Option<String>,
+    pub major_version: Option<u32>,
+    pub version_supported: bool,
+    pub version_hint: Option<String>,
+}
+
+pub const FFMPEG_MIN_MAJOR_VERSION: u32 = 4;
+
+fn probe_ffmpeg_version_line(app: &AppHandle, user_path: Option<&str>) -> Option<String> {
+    let mut cmd = build_ffmpeg_command(app, user_path).ok()?;
+    cmd.arg("-version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = cmd.output().ok()?;
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    combined
+        .lines()
+        .find(|line| {
+            let lower = line.to_lowercase();
+            lower.contains("ffmpeg version")
+        })
+        .map(|line| line.trim().to_string())
+}
+
+fn parse_ffmpeg_major_version(version_line: &str) -> Option<u32> {
+    let lower = version_line.to_lowercase();
+    let marker = "ffmpeg version";
+    let idx = lower.find(marker)?;
+    let rest = version_line[idx + marker.len()..].trim();
+    let token = rest.split_whitespace().next()?;
+    if token.starts_with('N') || token.starts_with('n') {
+        return Some(7);
+    }
+    token.split('.').next()?.parse().ok()
+}
+
+fn evaluate_ffmpeg_version(major: Option<u32>) -> (bool, Option<String>) {
+    match major {
+        None => (
+            true,
+            Some("无法识别 FFmpeg 版本号，请点击「测试 FFmpeg」确认是否可用。".to_string()),
+        ),
+        Some(m) if m < FFMPEG_MIN_MAJOR_VERSION => (
+            false,
+            Some(format!(
+                "当前主版本 {m}.x 低于最低要求 {FFMPEG_MIN_MAJOR_VERSION}.0，媒体转码可能失败，请升级 FFmpeg。"
+            )),
+        ),
+        Some(4) => (
+            true,
+            Some("4.x 可用；建议升级至 5.x 或更高，以获得更好的无损 / DSD 格式支持。".to_string()),
+        ),
+        Some(5..=8) => (true, None),
+        Some(m) => (
+            true,
+            Some(format!(
+                "检测到 FFmpeg {m}.x；若转码异常，请尝试 5.x–7.x 稳定版。"
+            )),
+        ),
+    }
+}
+
+fn ffmpeg_error(title: &str, reason: &str, solutions: &[&str]) -> AppError {
+    let mut message = format!("{title}\n\n原因：{reason}");
+    if !solutions.is_empty() {
+        message.push_str("\n\n解决方案：");
+        for (index, solution) in solutions.iter().enumerate() {
+            message.push_str(&format!("\n{}. {}", index + 1, solution));
+        }
+    }
+    AppError::Other(message)
+}
+
+const FFMPEG_UPGRADE_SOLUTIONS: &[&str] = &[
+    "升级至 FFmpeg 4.0 及以上（推荐 5.x / 6.x / 7.x 稳定版）",
+    "在「设置 → 媒体预览」中指定新版本 FFmpeg 路径",
+    "点击「测试 FFmpeg」确认版本与编码器可用",
+];
+
+const FFMPEG_FULL_BUILD_SOLUTIONS: &[&str] = &[
+    "安装包含 libx264 与 AAC 的完整版 FFmpeg（非 minimal 精简构建）",
+    "Windows 可参考 gyan.dev 或 BtbN 的 full / gpl 构建",
+    "在「设置 → 媒体预览」中指定完整版 ffmpeg 路径",
+];
+
+fn list_ffmpeg_encoders(app: &AppHandle, user_path: Option<&str>) -> AppResult<String> {
+    let mut cmd = build_ffmpeg_command(app, user_path)?;
+    cmd.args(["-hide_banner", "-encoders"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = cmd.output().map_err(AppError::Io)?;
+    Ok(format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    ))
+}
+
+fn encoder_listed(encoders: &str, name: &str) -> bool {
+    encoders.lines().any(|line| {
+        line.split_whitespace()
+            .any(|token| token.eq_ignore_ascii_case(name))
+    })
+}
+
+pub fn ensure_ffmpeg_ready(app: &AppHandle, user_path: Option<&str>) -> AppResult<()> {
+    let status = get_ffmpeg_status(app, user_path);
+    if !status.available {
+        return Err(ffmpeg_error(
+            "未找到 FFmpeg",
+            "系统 PATH 与内置 FFmpeg 均未检测到可用程序。",
+            &[
+                "安装 FFmpeg 4.0 及以上并加入系统 PATH",
+                "或在「设置 → 媒体预览」中手动指定 ffmpeg 可执行文件路径",
+                "配置后点击「测试 FFmpeg」确认可用",
+            ],
+        ));
+    }
+    if !status.version_supported {
+        let version_info = status
+            .version_line
+            .as_deref()
+            .unwrap_or("未知版本");
+        let reason = status
+            .version_hint
+            .map(|hint| format!("{version_info}。{hint}"))
+            .unwrap_or_else(|| version_info.to_string());
+        return Err(ffmpeg_error(
+            "FFmpeg 版本不受支持",
+            &reason,
+            FFMPEG_UPGRADE_SOLUTIONS,
+        ));
+    }
+    Ok(())
+}
+
+pub fn ensure_ffmpeg_ready_for_transcode(app: &AppHandle, user_path: Option<&str>) -> AppResult<()> {
+    ensure_ffmpeg_ready(app, user_path)?;
+    let encoders = list_ffmpeg_encoders(app, user_path)?;
+    let mut missing = Vec::new();
+    if !encoder_listed(&encoders, "libx264") {
+        missing.push("libx264（H.264 视频编码器）");
+    }
+    if !encoder_listed(&encoders, "aac") {
+        missing.push("aac（AAC 音频编码器）");
+    }
+    if !missing.is_empty() {
+        return Err(ffmpeg_error(
+            "FFmpeg 缺少转码所需编码器",
+            &format!("当前 FFmpeg 未启用：{}", missing.join("、")),
+            FFMPEG_FULL_BUILD_SOLUTIONS,
+        ));
+    }
+    Ok(())
+}
+
+fn extract_stderr_summary(stderr: &str) -> String {
+    let lines: Vec<&str> = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with("frame=")
+                && !line.contains("time=")
+                && !line.starts_with("size=")
+                && !line.starts_with("bitrate=")
+                && !line.starts_with("speed=")
+        })
+        .collect();
+    if lines.is_empty() {
+        return "FFmpeg 未返回详细错误信息。".to_string();
+    }
+    lines
+        .iter()
+        .rev()
+        .take(3)
+        .rev()
+        .copied()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn diagnose_ffmpeg_stderr(stderr: &str, source_ext: &str) -> AppError {
+    let lower = stderr.to_lowercase();
+
+    if lower.contains("unknown encoder 'libx264'")
+        || lower.contains("encoder libx264 not found")
+        || lower.contains("unknown encoder libx264")
+    {
+        return ffmpeg_error(
+            "FFmpeg 缺少 libx264 编码器",
+            "视频转码需要 libx264，但当前 FFmpeg 构建未包含该编码器。",
+            FFMPEG_FULL_BUILD_SOLUTIONS,
+        );
+    }
+
+    if lower.contains("unknown encoder 'aac'") || lower.contains("unknown encoder aac") {
+        return ffmpeg_error(
+            "FFmpeg 缺少 AAC 编码器",
+            "音频转码需要 AAC 编码器，但当前 FFmpeg 构建未包含该编码器。",
+            FFMPEG_FULL_BUILD_SOLUTIONS,
+        );
+    }
+
+    if lower.contains("unrecognized option")
+        || lower.contains("option not found")
+        || lower.contains("invalid argument")
+            && (lower.contains("map") || lower.contains("preset") || lower.contains("crf"))
+    {
+        return ffmpeg_error(
+            "FFmpeg 版本过旧",
+            "转码命令使用了当前 FFmpeg 不支持的参数，通常是版本低于 4.0 导致。",
+            FFMPEG_UPGRADE_SOLUTIONS,
+        );
+    }
+
+    if (lower.contains("decoder") || lower.contains("codec"))
+        && (lower.contains("not found") || lower.contains("unknown") || lower.contains("unsupported"))
+    {
+        return ffmpeg_error(
+            "无法解码该媒体格式",
+            &format!(
+                "FFmpeg 无法解码此 .{source_ext} 文件，可能格式损坏、加密，或当前 FFmpeg 缺少对应解码器。"
+            ),
+            &[
+                "确认文件可在其他播放器中正常播放",
+                "尝试升级 FFmpeg 至 5.x 或更高",
+                "在「设置 → 媒体预览」中点击「测试 FFmpeg」检查配置",
+            ],
+        );
+    }
+
+    if lower.contains("does not contain any stream")
+        || lower.contains("no stream")
+        || lower.contains("at least one output file must be specified")
+    {
+        return ffmpeg_error(
+            "媒体文件不含可用音/视频流",
+            &format!("FFmpeg 在 .{source_ext} 文件中未找到可转码的音视频流。"),
+            &[
+                "确认文件未损坏且含有音轨或视频轨",
+                "尝试用其他工具重新封装或导出该媒体",
+            ],
+        );
+    }
+
+    if lower.contains("invalid data")
+        || lower.contains("could not find codec parameters")
+        || lower.contains("error while decoding")
+    {
+        return ffmpeg_error(
+            "媒体文件损坏或格式异常",
+            &format!("FFmpeg 读取 .{source_ext} 时失败：{}", extract_stderr_summary(stderr)),
+            &[
+                "确认源文件完整且可在其他播放器中打开",
+                "若仅本应用失败，尝试升级 FFmpeg 或更换转码源文件",
+            ],
+        );
+    }
+
+    if lower.contains("permission denied") {
+        return ffmpeg_error(
+            "FFmpeg 无权限访问文件",
+            &extract_stderr_summary(stderr),
+            &[
+                "确认源文件未被其他程序独占占用",
+                "检查文件与输出目录的读写权限",
+            ],
+        );
+    }
+
+    ffmpeg_error(
+        "FFmpeg 转码失败",
+        &extract_stderr_summary(stderr),
+        &[
+            "在「设置 → 媒体预览」中点击「测试 FFmpeg」检查版本与编码器",
+            "确认 FFmpeg 为 4.0 及以上且包含 libx264 / AAC",
+            "若问题持续，尝试更换 FFmpeg 或检查源文件是否损坏",
+        ],
+    )
+}
+
+fn enrich_ffmpeg_status(
+    app: &AppHandle,
+    user_path: Option<&str>,
+    source: FfmpegSource,
+    path: PathBuf,
+) -> FfmpegStatus {
+    let version_line = probe_ffmpeg_version_line(app, user_path);
+    let major_version = version_line
+        .as_deref()
+        .and_then(parse_ffmpeg_major_version);
+    let (version_supported, version_hint) = evaluate_ffmpeg_version(major_version);
+    FfmpegStatus {
+        available: true,
+        source: Some(source.as_str().to_string()),
+        path: Some(path.to_string_lossy().to_string()),
+        version_line,
+        major_version,
+        version_supported,
+        version_hint,
+    }
 }
 
 fn locate_ffmpeg(app: &AppHandle, user_path: Option<&str>) -> Result<(FfmpegSource, PathBuf), AppError> {
@@ -461,6 +769,8 @@ pub fn transcode_media_to_file(
     source_ext: &str,
     mut on_progress: impl FnMut(TranscodeProgressUpdate),
 ) -> AppResult<()> {
+    ensure_ffmpeg_ready_for_transcode(app, user_path)?;
+
     on_progress(TranscodeProgressUpdate {
         percent: None,
         message: "正在分析媒体…".to_string(),
@@ -533,8 +843,11 @@ pub fn transcode_media_to_file(
 
     let reader = std::io::BufReader::new(stderr);
     use std::io::BufRead;
+    let mut stderr_log = String::new();
     for line in reader.lines() {
         let line = line.map_err(AppError::Io)?;
+        stderr_log.push_str(&line);
+        stderr_log.push('\n');
         if let Some(current) = parse_ffmpeg_time_seconds(&line) {
             let percent = duration.map(|total| {
                 ((current / total) * 100.0).clamp(0.0, 99.0) as u8
@@ -548,7 +861,7 @@ pub fn transcode_media_to_file(
 
     let status = child.wait().map_err(AppError::Io)?;
     if !status.success() {
-        return Err(AppError::Other("FFmpeg 转码失败".to_string()));
+        return Err(diagnose_ffmpeg_stderr(&stderr_log, source_ext));
     }
 
     if !output.is_file() {
@@ -611,6 +924,7 @@ pub fn resolve_preview_path(
         });
     }
 
+    ensure_ffmpeg_ready_for_transcode(app, user_path)?;
     let transcode_result = run_ffmpeg_transcode(app, user_path, source, &cached, &ext);
     release_transcode_lock(&cached);
     transcode_result?;
@@ -623,44 +937,36 @@ pub fn ffmpeg_available(app: &AppHandle, user_path: Option<&str>) -> bool {
 
 pub fn get_ffmpeg_status(app: &AppHandle, user_path: Option<&str>) -> FfmpegStatus {
     match locate_ffmpeg(app, user_path) {
-        Ok((source, path)) => FfmpegStatus {
-            available: true,
-            source: Some(source.as_str().to_string()),
-            path: Some(path.to_string_lossy().to_string()),
-        },
+        Ok((source, path)) => enrich_ffmpeg_status(app, user_path, source, path),
         Err(_) => FfmpegStatus {
             available: false,
             source: None,
             path: None,
+            version_line: None,
+            major_version: None,
+            version_supported: false,
+            version_hint: None,
         },
     }
 }
 
+pub fn validate_ffmpeg_for_transcode(app: &AppHandle, user_path: Option<&str>) -> AppResult<()> {
+    ensure_ffmpeg_ready_for_transcode(app, user_path)
+}
+
 pub fn test_ffmpeg(app: &AppHandle, user_path: Option<&str>) -> AppResult<String> {
-    let mut cmd = build_ffmpeg_command(app, user_path)?;
-    cmd.arg("-version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let output = cmd.output().map_err(AppError::Io)?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::Other(format!(
-            "FFmpeg 测试失败: {}",
-            stderr.trim()
-        )));
+    validate_ffmpeg_for_transcode(app, user_path)?;
+    let status = get_ffmpeg_status(app, user_path);
+    let version_line = status
+        .version_line
+        .unwrap_or_else(|| "FFmpeg 可用".to_string());
+    if let Some(hint) = status.version_hint {
+        Ok(format!(
+            "{version_line}\n\n{hint}\n\n已验证 libx264 与 AAC 编码器可用。"
+        ))
+    } else {
+        Ok(format!("{version_line}\n\n已验证 libx264 与 AAC 编码器可用。"))
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let combined = format!("{stdout}{stderr}");
-    let first_line = combined
-        .lines()
-        .find(|line| line.contains("ffmpeg version") || line.contains("FFmpeg"))
-        .unwrap_or("FFmpeg 可用")
-        .trim();
-    Ok(first_line.to_string())
 }
 
 #[cfg(test)]
@@ -682,5 +988,46 @@ mod tests {
         }
         let path = find_ffmpeg_in_system_path().unwrap();
         assert!(path.is_file(), "expected ffmpeg binary at {}", path.display());
+    }
+
+    #[test]
+    fn parse_ffmpeg_major_version_handles_stable_and_git_builds() {
+        assert_eq!(
+            parse_ffmpeg_major_version("ffmpeg version 6.1.1 Copyright"),
+            Some(6)
+        );
+        assert_eq!(
+            parse_ffmpeg_major_version("ffmpeg version 4.4.2-0ubuntu0.22.04.1"),
+            Some(4)
+        );
+        assert_eq!(
+            parse_ffmpeg_major_version("ffmpeg version N-92689-g1234567890"),
+            Some(7)
+        );
+        assert_eq!(parse_ffmpeg_major_version("ffmpeg version 3.4.13"), Some(3));
+    }
+
+    #[test]
+    fn evaluate_ffmpeg_version_marks_old_builds_unsupported() {
+        let (supported, _) = evaluate_ffmpeg_version(Some(3));
+        assert!(!supported);
+        let (supported, hint) = evaluate_ffmpeg_version(Some(4));
+        assert!(supported);
+        assert!(hint.is_some());
+        let (supported, hint) = evaluate_ffmpeg_version(Some(6));
+        assert!(supported);
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn diagnose_ffmpeg_stderr_maps_missing_encoder() {
+        let error = diagnose_ffmpeg_stderr("Unknown encoder 'libx264'", "wmv");
+        assert!(error.to_string().contains("缺少 libx264"));
+    }
+
+    #[test]
+    fn diagnose_ffmpeg_stderr_maps_old_version_options() {
+        let error = diagnose_ffmpeg_stderr("Unrecognized option 'preset'", "avi");
+        assert!(error.to_string().contains("版本过旧"));
     }
 }

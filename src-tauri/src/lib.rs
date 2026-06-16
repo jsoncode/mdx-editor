@@ -134,6 +134,7 @@ pub fn run() {
             commands::resolve_media_preview,
             commands::get_ffmpeg_status,
             commands::ffmpeg_available,
+            commands::validate_ffmpeg_for_transcode,
             commands::test_ffmpeg,
             commands::export_markdown,
             commands::export_html,

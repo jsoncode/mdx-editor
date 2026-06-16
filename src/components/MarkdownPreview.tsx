@@ -6,6 +6,7 @@ import { buildRemarkPlugins } from "../lib/markdownPlugins";
 import { rehypeUnwrapMedia } from "../lib/rehypeUnwrapMedia";
 import { openAttachmentWithConfirm } from "../lib/attachment";
 import { resolveAssetUrl, resolveMediaPreviewUrl, peekMediaPreviewUrl, getMediaPreviewRevision, subscribeMediaPreviewRevision } from "../lib/assetResolver";
+import { FfmpegErrorDetails } from "./FfmpegErrorDetails";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
   audioMimeFallbacks,
@@ -199,9 +200,10 @@ function AssetMedia({
 
   if (mediaError) {
     return (
-      <p className="media-preview-status media-preview-error" aria-live="polite">
-        {label}预览失败：{mediaError}
-      </p>
+      <div className="media-preview-status media-preview-error" aria-live="polite">
+        <p>{label}预览失败</p>
+        <FfmpegErrorDetails message={mediaError} className="ffmpeg-error-details media-preview-error-detail" />
+      </div>
     );
   }
 

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { fileNameFromPath, needsMediaTranscode } from "./media";
 import { ensureLargeTranscodeConfirmed } from "./mediaTranscodeConfirm";
+import { ensureFfmpegReadyForTranscode } from "./ffmpegTranscode";
 import { useMediaTranscodeStore } from "../stores/mediaTranscodeStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
@@ -49,6 +50,7 @@ export async function insertResourceFromPath(
   registerPendingJob(fileName, jobId);
 
   try {
+    await ensureFfmpegReadyForTranscode(ffmpegPath);
     return await invoke<string>("insert_media_from_path", {
       workspaceId,
       sourcePath,
@@ -88,6 +90,7 @@ export async function insertResourceFromBytes(
   registerPendingJob(fileNameFromPath(filename), jobId);
 
   try {
+    await ensureFfmpegReadyForTranscode(ffmpegPath);
     return await invoke<string>("insert_media_from_bytes", {
       workspaceId,
       filename,

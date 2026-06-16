@@ -122,11 +122,19 @@ pub fn insert_media_from_path(
         ));
     }
 
-    if !crate::media_preview::ffmpeg_available(app, user_path) {
-        return Err(AppError::Other(
-            "未找到 FFmpeg，无法转码该格式。请在「设置 → 媒体预览」中配置，或确保系统 PATH 中已安装 FFmpeg。"
-                .to_string(),
-        ));
+    if let Err(error) = crate::media_preview::ensure_ffmpeg_ready_for_transcode(app, user_path) {
+        let message = error.to_string();
+        emit_progress(
+            app,
+            MediaTranscodeProgressPayload {
+                job_id: job_id.to_string(),
+                file_name: file_name.clone(),
+                phase: "error".to_string(),
+                percent: None,
+                message: Some(message.clone()),
+            },
+        );
+        return Err(error);
     }
 
     let out_ext = target_extension(&ext);

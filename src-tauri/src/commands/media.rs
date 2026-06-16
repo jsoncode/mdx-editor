@@ -48,6 +48,17 @@ pub fn ffmpeg_available(app: AppHandle, ffmpeg_path: Option<String>) -> Result<b
 }
 
 #[tauri::command]
+pub fn validate_ffmpeg_for_transcode(
+    app: AppHandle,
+    ffmpeg_path: Option<String>,
+) -> Result<(), AppError> {
+    media_preview::validate_ffmpeg_for_transcode(
+        &app,
+        ffmpeg_path.as_deref().filter(|value| !value.trim().is_empty()),
+    )
+}
+
+#[tauri::command]
 pub fn test_ffmpeg(app: AppHandle, ffmpeg_path: Option<String>) -> Result<String, AppError> {
     media_preview::test_ffmpeg(
         &app,

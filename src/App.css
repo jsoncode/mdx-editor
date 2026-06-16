@@ -1449,6 +1449,48 @@ body,
   color: #666;
 }
 
+.ffmpeg-error-details {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: #444;
+}
+
+.ffmpeg-error-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  color: #b42318;
+}
+
+.ffmpeg-error-reason {
+  margin: 0 0 0.45rem;
+}
+
+.ffmpeg-error-reason strong,
+.ffmpeg-error-solutions strong {
+  color: #333;
+}
+
+.ffmpeg-error-solutions {
+  margin: 0;
+}
+
+.ffmpeg-error-solutions ol {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.ffmpeg-error-solutions li + li {
+  margin-top: 0.2rem;
+}
+
+.media-preview-error-detail {
+  margin-top: 0.45rem;
+}
+
+.media-transcode-error.ffmpeg-error-details {
+  color: #666;
+}
+
 .media-transcode-progress-track {
   height: 6px;
   border-radius: 999px;
@@ -2596,6 +2638,26 @@ body.printing .markdown-preview {
 
 .settings-hint-ok {
   color: #15803d;
+}
+
+.settings-ffmpeg-requirements {
+  margin-bottom: 0.25rem;
+}
+
+.settings-ffmpeg-requirements .settings-label {
+  margin-bottom: 0.2rem;
+}
+
+.settings-ffmpeg-version-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.55;
+}
+
+.settings-ffmpeg-version-list li + li {
+  margin-top: 0.2rem;
 }
 
 .settings-section {

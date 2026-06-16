@@ -22,6 +22,13 @@ import { useVaultStore } from "../stores/vaultStore";
 import type { GitSyncSettings } from "../types/settings";
 import type { FfmpegStatus } from "../types/ffmpeg";
 import { ffmpegSourceLabel } from "../types/ffmpeg";
+import {
+  FFMPEG_VERSION_REQUIREMENTS,
+  FFMPEG_VERSION_RANGE_LABEL,
+  FFMPEG_VERSION_RANGE_HINT,
+  formatDetectedFfmpegVersion,
+  ffmpegVersionHintClassName,
+} from "../lib/ffmpegRequirements";
 
 type LogViewMode = "formatted" | "raw";
 
@@ -355,14 +362,46 @@ export function SettingsPage() {
               预览 WMA、WMV、AVI 等浏览器不支持的格式时，需要 FFmpeg 转码。若系统 PATH
               中已安装 FFmpeg，留空下方路径即可自动使用，无需手动配置。
             </p>
-            {ffmpegStatus?.available ? (
-              <p className="settings-hint settings-hint-ok settings-hint-block">
-                已检测到 FFmpeg（{ffmpegSourceLabel(ffmpegStatus.source ?? "")}
-                {ffmpegStatus.path ? `：${ffmpegStatus.path}` : ""}）
-                {ffmpegStatus.source === "path" && !ffmpegPathInput.trim()
-                  ? "，可直接预览需转码的媒体。"
-                  : ""}
+            <div className="settings-ffmpeg-requirements settings-hint-block">
+              <p className="settings-label">版本要求</p>
+              <p className="settings-hint">
+                支持 <strong>FFmpeg {FFMPEG_VERSION_RANGE_LABEL}</strong>（{FFMPEG_VERSION_RANGE_HINT}）
               </p>
+              <ul className="settings-ffmpeg-version-list">
+                {FFMPEG_VERSION_REQUIREMENTS.slice(1).map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            {ffmpegStatus?.available ? (
+              <>
+                <p className="settings-hint settings-hint-ok settings-hint-block">
+                  已检测到 FFmpeg（{ffmpegSourceLabel(ffmpegStatus.source ?? "")}
+                  {ffmpegStatus.path ? `：${ffmpegStatus.path}` : ""}）
+                  {ffmpegStatus.source === "path" && !ffmpegPathInput.trim()
+                    ? "，可直接预览需转码的媒体。"
+                    : ""}
+                </p>
+                {formatDetectedFfmpegVersion(ffmpegStatus) ? (
+                  <p className="settings-hint settings-hint-block">
+                    当前版本：{formatDetectedFfmpegVersion(ffmpegStatus)}
+                    {ffmpegStatus.majorVersion != null
+                      ? `（主版本 ${ffmpegStatus.majorVersion}.x）`
+                      : ""}
+                  </p>
+                ) : null}
+                {ffmpegStatus.versionHint ? (
+                  <p
+                    className={`${ffmpegVersionHintClassName(ffmpegStatus)} settings-hint-block`}
+                  >
+                    {ffmpegStatus.versionHint}
+                  </p>
+                ) : ffmpegStatus.versionSupported !== false ? (
+                  <p className="settings-hint settings-hint-ok settings-hint-block">
+                    版本符合要求，可正常用于媒体转码。
+                  </p>
+                ) : null}
+              </>
             ) : ffmpegStatus ? (
               <p className="settings-hint settings-hint-warn settings-hint-block">
                 未检测到可用的 FFmpeg。请安装并加入系统 PATH，或使用下方路径手动指定。
