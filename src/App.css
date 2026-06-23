@@ -3120,3 +3120,17 @@ body.printing .markdown-preview {
 .history-diff-remove .history-diff-prefix {
   color: #cb2431;
 }
+
+.pdf-export-status-overlay {
+  position: fixed;
+  left: 50%;
+  bottom: 2rem;
+  transform: translateX(-50%);
+  z-index: 2001;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  background: rgba(32, 33, 36, 0.88);
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+}

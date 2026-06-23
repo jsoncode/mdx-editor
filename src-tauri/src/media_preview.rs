@@ -702,6 +702,64 @@ pub fn probe_has_video_stream(
     )
 }
 
+pub fn extract_video_thumbnail_bytes(
+    app: &AppHandle,
+    user_path: Option<&str>,
+    source: &Path,
+) -> AppResult<Vec<u8>> {
+    if !source.is_file() {
+        return Err(AppError::Other(format!(
+            "视频文件不存在: {}",
+            source.display()
+        )));
+    }
+
+    ensure_ffmpeg_ready(app, user_path)?;
+
+    let ext = crate::workspace::extension_from_path(source);
+    let temp_output = std::env::temp_dir().join(format!("mdx-thumb-{}.jpg", uuid::Uuid::new_v4()));
+
+    let mut cmd = build_ffmpeg_command(app, user_path)?;
+    cmd.args(["-hide_banner", "-loglevel", "error", "-y"]);
+    if needs_deep_probe(&ext) {
+        cmd.args(["-probesize", "100M", "-analyzeduration", "100M"]);
+    }
+    cmd.args(["-ss", "0"])
+        .arg("-i")
+        .arg(source)
+        .args([
+            "-map",
+            "0:v:0?",
+            "-vf",
+            "scale=iw*sar:ih,setsar=1",
+            "-vframes",
+            "1",
+            "-q:v",
+            "2",
+        ])
+        .arg(&temp_output)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+
+    let output = cmd.output().map_err(AppError::Io)?;
+    if !output.status.success() || !temp_output.is_file() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::Other(format!(
+            "无法提取视频封面帧{}",
+            if stderr.trim().is_empty() {
+                String::new()
+            } else {
+                format!("：{}", stderr.trim())
+            }
+        )));
+    }
+
+    let bytes = fs::read(&temp_output)?;
+    let _ = fs::remove_file(&temp_output);
+    Ok(bytes)
+}
+
 pub fn probe_media_duration(
     app: &AppHandle,
     user_path: Option<&str>,

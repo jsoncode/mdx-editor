@@ -10,6 +10,7 @@ mod md_import;
 mod mdx;
 mod media_transcode;
 mod media_preview;
+mod pdf_export;
 mod vault;
 mod versions;
 mod diagnostics;
@@ -140,6 +141,10 @@ pub fn run() {
             commands::export_markdown,
             commands::export_html,
             commands::export_encrypted_mdx,
+            commands::export_html_to_pdf,
+            commands::collect_content_asset_refs,
+            commands::read_file_base64,
+            commands::extract_video_thumbnail_base64,
             commands::git_sync_pull,
             commands::git_sync_push,
             commands::git_sync_test,

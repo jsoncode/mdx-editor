@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      with_ffmpeg:
+        description: Bundle FFmpeg in installers (larger download)
+        type: boolean
+        default: false
 
 permissions:
   contents: write

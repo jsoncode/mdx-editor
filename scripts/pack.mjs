@@ -71,7 +71,7 @@ MDX Editor 打包类型:
   npm run pack:ffmpeg               内置 FFmpeg + 交互式选择
 
 快捷命令:
-  npm run pack:exe | pack:nsis | pack:msi | pack:all
+  npm run pack:exe | pack:nsis | pack:msi | pack:all | pack:ci
   npm run pack:ffmpeg:exe | pack:ffmpeg:all  等
 `);
 }

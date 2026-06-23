@@ -25,6 +25,7 @@ import {
 import { removeRecentFile } from "../lib/recentFiles";
 import { promptRemoveMissingRecentDocument } from "../lib/recentDocumentPrompt";
 import { requestExportSuccessPrompt } from "../lib/exportSuccessPrompt";
+import { usePdfExportStore } from "../stores/pdfExportStore";
 import { revealVaultItem } from "../lib/vault";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
@@ -237,6 +238,30 @@ export function useDocumentActions(previewHtml: string) {
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!workspaceId) return;
+    const content = useDocumentStore.getState().content;
+    const selected = await save({
+      title: "导出 PDF",
+      filters: [{ name: "PDF 文档", extensions: ["pdf"] }],
+      defaultPath: "导出.pdf",
+    });
+    if (typeof selected !== "string") return;
+
+    try {
+      const title = manifest?.title ?? "未命名文档";
+      await usePdfExportStore.getState().exportDocument({
+        workspaceId,
+        content,
+        outputPath: selected,
+        title,
+      });
+      await confirmExportSuccess(selected, "PDF 文档");
+    } catch (error) {
+      await message(String(error), { title: "PDF 导出失败", kind: "error" });
+    }
+  };
+
   const handleExportEncryptedMdx = async () => {
     if (!workspaceId) return;
     const { password } = await requestDocumentPassword({
@@ -298,6 +323,7 @@ export function useDocumentActions(previewHtml: string) {
     handleInsertMedia,
     handleExportMarkdown,
     handleExportHtml,
+    handleExportPdf,
     handleExportEncryptedMdx,
     handleOpenPath,
   };

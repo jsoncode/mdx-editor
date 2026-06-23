@@ -15,6 +15,7 @@ import { DocumentPropertiesDialog } from "./components/DocumentPropertiesDialog"
 import { PasswordPromptDialog } from "./components/PasswordPromptDialog";
 import { MissingRecentDocumentDialog } from "./components/MissingRecentDocumentDialog";
 import { ExportSuccessDialog } from "./components/ExportSuccessDialog";
+import { PdfExportStatus } from "./components/PdfExportStatus";
 import { MediaTranscodePanel } from "./components/MediaTranscodePanel";
 import { useAutosave } from "./hooks/useAutosave";
 import { useDocumentActions } from "./hooks/useDocumentActions";
@@ -529,6 +530,7 @@ function App() {
       <PasswordPromptDialog />
       <MissingRecentDocumentDialog />
       <ExportSuccessDialog />
+      <PdfExportStatus />
       <MediaTranscodePanel />
     </div>
   );
