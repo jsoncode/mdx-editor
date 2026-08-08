@@ -3,7 +3,8 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { useVaultActions } from "../hooks/useVaultActions";
 import { useVaultTreeMenu } from "../hooks/useVaultTreeMenu";
 import { useVaultTreeDrag } from "../hooks/useVaultTreeDrag";
-import { isPlainMdPath } from "../lib/documentPaths";
+import { isPlainMdPath, isPlainHtmlPath } from "../lib/documentPaths";
+import { getVaultFileCategory, isVaultFileEditable } from "../lib/fileTypes";
 import { useDocumentStore } from "../stores/documentStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { getVaultName } from "../types/vault";
@@ -89,23 +90,52 @@ export function WorkspaceSidebar() {
     }
 
     if (target.kind === "file") {
-      const mdItems: VaultContextMenuItem[] = isPlainMdPath(target.path)
+      const category = getVaultFileCategory(target.path);
+      const editable = isVaultFileEditable(category);
+
+      const convertItems: VaultContextMenuItem[] = [];
+      if (isPlainMdPath(target.path)) {
+        convertItems.push(
+          {
+            id: "convert-mdx",
+            label: "转换为 MDX",
+            onClick: () => void treeMenu.convertMdToMdx(target),
+          },
+          { id: "sep-convert", separator: true },
+        );
+      } else if (isPlainHtmlPath(target.path)) {
+        convertItems.push(
+          {
+            id: "convert-mdx",
+            label: "转换为 MDX",
+            onClick: () => void treeMenu.convertHtmlToMdx(target),
+          },
+          { id: "sep-convert", separator: true },
+        );
+      }
+
+      const openItem: VaultContextMenuItem = editable
+        ? { id: "open", label: "打开", onClick: () => handleOpenFileInVault(target.path) }
+        : {
+            id: "open-system",
+            label: "用系统默认应用打开",
+            onClick: () => handleOpenFileInVault(target.path),
+          };
+
+      const manageItems: VaultContextMenuItem[] = editable
         ? [
-            {
-              id: "convert-mdx",
-              label: "转换为 MDX",
-              onClick: () => void treeMenu.convertMdToMdx(target),
-            },
-            { id: "sep-convert", separator: true },
+            { id: "rename", label: "重命名", onClick: () => treeMenu.setRenameTarget(target) },
+            { id: "delete", label: "删除", danger: true, onClick: () => void treeMenu.deleteFile(target) },
           ]
-        : [];
+        : [
+            { id: "delete", label: "删除", danger: true, onClick: () => void treeMenu.deleteFile(target) },
+          ];
 
       return [
-        { id: "open", label: "打开", onClick: () => handleOpenFileInVault(target.path) },
-        ...mdItems,
+        openItem,
+        ...convertItems,
         { id: "sep-1", separator: true },
-        { id: "rename", label: "重命名", onClick: () => treeMenu.setRenameTarget(target) },
-        { id: "delete", label: "删除", danger: true, onClick: () => void treeMenu.deleteFile(target) },
+        ...manageItems,
         { id: "sep-2", separator: true },
         { id: "info", label: "查看信息", onClick: () => void treeMenu.showInfo(target) },
         {

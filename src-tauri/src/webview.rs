@@ -3,8 +3,9 @@ pub fn disable_browser_accelerator_keys(window: &tauri::WebviewWindow) {
     let _ = window.with_webview(|webview| {
         #[allow(unsafe_code)]
         unsafe {
-            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
-            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings;
+            use webview2_com::Microsoft::Web::WebView2::Win32::{
+                ICoreWebView2Settings, ICoreWebView2Settings3,
+            };
             use windows_core::Interface;
 
             let controller = webview.controller();
@@ -16,6 +17,10 @@ pub fn disable_browser_accelerator_keys(window: &tauri::WebviewWindow) {
                 Ok(settings) => settings,
                 Err(_) => return,
             };
+
+            let _ = settings.SetIsScriptEnabled(true);
+            let _ = settings.SetAreDefaultScriptDialogsEnabled(true);
+
             let settings3: ICoreWebView2Settings3 = match settings.cast() {
                 Ok(settings3) => settings3,
                 Err(_) => return,

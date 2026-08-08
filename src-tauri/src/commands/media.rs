@@ -73,10 +73,12 @@ pub async fn insert_media_from_path(
     source_path: String,
     ffmpeg_path: Option<String>,
     job_id: String,
+    snippet_format: Option<String>,
 ) -> Result<String, AppError> {
     let app = app.clone();
     let ffmpeg_path = ffmpeg_path.filter(|value| !value.trim().is_empty());
     let source = PathBuf::from(source_path);
+    let snippet_format = snippet_format.filter(|value| !value.trim().is_empty());
     tauri::async_runtime::spawn_blocking(move || {
         let workspaces = app.state::<WorkspaceManager>();
         media_transcode::insert_media_from_path(
@@ -86,6 +88,7 @@ pub async fn insert_media_from_path(
             &source,
             ffmpeg_path.as_deref(),
             &job_id,
+            snippet_format.as_deref(),
         )
     })
     .await
@@ -100,9 +103,11 @@ pub async fn insert_media_from_bytes(
     bytes: Vec<u8>,
     ffmpeg_path: Option<String>,
     job_id: String,
+    snippet_format: Option<String>,
 ) -> Result<String, AppError> {
     let app = app.clone();
     let ffmpeg_path = ffmpeg_path.filter(|value| !value.trim().is_empty());
+    let snippet_format = snippet_format.filter(|value| !value.trim().is_empty());
     tauri::async_runtime::spawn_blocking(move || {
         let workspaces = app.state::<WorkspaceManager>();
         media_transcode::insert_media_from_bytes(
@@ -113,6 +118,7 @@ pub async fn insert_media_from_bytes(
             &bytes,
             ffmpeg_path.as_deref(),
             &job_id,
+            snippet_format.as_deref(),
         )
     })
     .await

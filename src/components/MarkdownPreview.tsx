@@ -6,6 +6,7 @@ import { buildRemarkPlugins } from "../lib/markdownPlugins";
 import { rehypeUnwrapMedia } from "../lib/rehypeUnwrapMedia";
 import { openAttachmentWithConfirm } from "../lib/attachment";
 import { resolveAssetUrl, resolveMediaPreviewUrl, peekMediaPreviewUrl, getMediaPreviewRevision, subscribeMediaPreviewRevision } from "../lib/assetResolver";
+import { resolveIframeSrc } from "../lib/htmlPreview";
 import { FfmpegErrorDetails } from "./FfmpegErrorDetails";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
@@ -279,6 +280,62 @@ function AttachmentLink({
   );
 }
 
+function AssetIframe({
+  src,
+  workspaceId,
+  title,
+  ...props
+}: React.IframeHTMLAttributes<HTMLIFrameElement> & {
+  workspaceId: string | null;
+}) {
+  const [resolvedSrc, setResolvedSrc] = useState("");
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!src) {
+      setResolvedSrc("");
+      setReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    setReady(false);
+    void resolveIframeSrc(workspaceId, src).then((url) => {
+      if (cancelled) return;
+      setResolvedSrc(url);
+      setReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src, workspaceId]);
+
+  if (!src) return null;
+
+  const canUseSrc = ready && resolvedSrc;
+  const isExternal =
+    resolvedSrc.startsWith("http://") ||
+    resolvedSrc.startsWith("https://") ||
+    resolvedSrc.startsWith("//");
+
+  return (
+    <iframe
+      {...props}
+      className={["preview-iframe", props.className].filter(Boolean).join(" ")}
+      title={title ?? "嵌入内容"}
+      {...(isExternal
+        ? {
+            sandbox:
+              props.sandbox ??
+              "allow-scripts allow-same-origin allow-forms allow-popups allow-modals",
+          }
+        : {})}
+      src={canUseSrc ? resolvedSrc : undefined}
+    />
+  );
+}
+
 function AssetLink({
   href,
   children,
@@ -368,6 +425,18 @@ export function MarkdownPreview({
       audio: (
         props: React.AudioHTMLAttributes<HTMLAudioElement> & ExtraProps,
       ) => <AssetMedia src={mediaSrcFromProps(props)} workspaceId={workspaceId} kind="audio" />,
+      iframe: (props: React.IframeHTMLAttributes<HTMLIFrameElement> & ExtraProps) => (
+        <AssetIframe
+          src={props.src}
+          workspaceId={workspaceId}
+          title={props.title}
+          width={props.width}
+          height={props.height}
+          style={props.style}
+          allow={props.allow}
+          loading={props.loading}
+        />
+      ),
     }),
     [workspaceId],
   );

@@ -3,6 +3,16 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
+  "webviews": ["main"],
+  "local": true,
+  "remote": {
+    "urls": [
+      "http://localhost:*/*",
+      "http://127.0.0.1:*/*",
+      "http://asset.localhost/**",
+      "https://asset.localhost/**"
+    ]
+  },
   "permissions": [
     "core:default",
     "core:window:allow-close",

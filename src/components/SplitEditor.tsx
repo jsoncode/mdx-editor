@@ -9,6 +9,8 @@ import { useUiStore } from "../stores/uiStore";
 import { EditorToolbar } from "./EditorToolbar";
 import { MarkdownEditor, MarkdownEditorHandle } from "./MarkdownEditor";
 import { MarkdownPreview } from "./MarkdownPreview";
+import { HtmlPreview } from "./HtmlPreview";
+import { editorModeForContent } from "../lib/fileTypes";
 import { SearchPanel } from "./SearchPanel";
 
 function EditorPane({
@@ -19,6 +21,7 @@ function EditorPane({
   handlePaste,
   previewHtml,
   onCreateEditor,
+  editorMode,
 }: {
   editorRef: React.RefObject<MarkdownEditorHandle | null>;
   content: string;
@@ -27,6 +30,7 @@ function EditorPane({
   handlePaste: (event: ClipboardEvent) => void;
   previewHtml: string;
   onCreateEditor: (view: EditorView | null) => void;
+  editorMode: ReturnType<typeof editorModeForContent>;
 }) {
   const { handleInsertImage, handleInsertAudio, handleInsertVideo } = useDocumentActions(previewHtml);
 
@@ -41,6 +45,7 @@ function EditorPane({
       <MarkdownEditor
         ref={editorRef}
         value={content}
+        editorMode={editorMode}
         onChange={setContent}
         onDrop={handleDrop}
         onPaste={handlePaste}
@@ -54,6 +59,8 @@ export function SplitEditor() {
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const content = useDocumentStore((s) => s.content);
   const workspaceId = useDocumentStore((s) => s.workspaceId);
+  const filePath = useDocumentStore((s) => s.filePath);
+  const contentFormat = useDocumentStore((s) => s.contentFormat);
   const previewHtml = useDocumentStore((s) => s.previewHtml);
   const setContent = useDocumentStore((s) => s.setContent);
   const setInsertAtCursor = useDocumentStore((s) => s.setInsertAtCursor);
@@ -85,7 +92,11 @@ export function SplitEditor() {
     return () => setInsertAtCursor(null);
   }, [setInsertAtCursor, insertAtCursor]);
 
-  const { handleDrop, handlePaste } = useAssetInsert(insertAtCursor, openMdxFile);
+  const editorMode = editorModeForContent(contentFormat, filePath);
+  const useHtmlPreview = contentFormat === "html";
+  const insertContentFormat = useHtmlPreview || editorMode === "html" ? "html" : contentFormat;
+
+  const { handleDrop, handlePaste } = useAssetInsert(insertAtCursor, openMdxFile, insertContentFormat);
 
   const showEditor = layoutMode === "edit" || layoutMode === "split";
   const showPreview = layoutMode === "preview" || layoutMode === "split";
@@ -99,7 +110,22 @@ export function SplitEditor() {
     handlePaste,
     previewHtml,
     onCreateEditor: handleEditorView,
+    editorMode,
   };
+
+  const previewPane = useHtmlPreview ? (
+    <HtmlPreview
+      content={content}
+      workspaceId={workspaceId}
+      onHtmlChange={setPreviewHtml}
+    />
+  ) : (
+    <MarkdownPreview
+      content={content}
+      workspaceId={workspaceId}
+      onHtmlChange={setPreviewHtml}
+    />
+  );
 
   return (
     <div className="split-editor">
@@ -112,23 +138,13 @@ export function SplitEditor() {
             </Panel>
             <Separator className="resize-handle" />
             <Panel defaultSize={50} minSize={25}>
-              <MarkdownPreview
-                content={content}
-                workspaceId={workspaceId}
-                onHtmlChange={setPreviewHtml}
-              />
+              {previewPane}
             </Panel>
           </Group>
         ) : (
           <div className="single-pane">
             {showEditor && <EditorPane {...editorPaneProps} />}
-            {showPreview && (
-              <MarkdownPreview
-                content={content}
-                workspaceId={workspaceId}
-                onHtmlChange={setPreviewHtml}
-              />
-            )}
+            {showPreview && previewPane}
           </div>
         )}
       </div>

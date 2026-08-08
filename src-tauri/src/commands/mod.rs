@@ -1,4 +1,5 @@
 pub mod asset;
+pub mod devtools;
 pub mod document;
 pub mod export;
 pub mod git;
@@ -6,6 +7,7 @@ pub mod media;
 pub mod vault;
 
 pub use asset::*;
+pub use devtools::*;
 pub use document::*;
 pub use export::*;
 pub use git::*;

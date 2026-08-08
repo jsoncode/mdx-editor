@@ -2,7 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useState } from "react";
-import { mdPathToMdxPath, isPlainMdPath } from "../lib/documentPaths";import {
+import { mdPathToMdxPath, htmlPathToMdxPath, isPlainMdPath, isPlainHtmlPath } from "../lib/documentPaths";
+import {
   deleteVaultFile,
   deleteVaultFolder,
   getRelativeVaultPath,
@@ -302,6 +303,65 @@ export function useVaultTreeMenu() {
     [filePath, workspaceId, refreshTree, setRecentFiles],
   );
 
+  const convertHtmlToMdx = useCallback(
+    async (target: Extract<VaultContextTarget, { kind: "file" }>) => {
+      if (!isPlainHtmlPath(target.path)) return;
+
+      const outputPath = htmlPathToMdxPath(target.path);
+
+      if (filePath === target.path && workspaceId) {
+        const confirmed = await ask(
+          "将当前 HTML 文档转换为 MDX，本地引用的资源会复制到 asset 并打包进 MDX。是否继续？",
+          {
+            title: "转换为 MDX",
+            kind: "info",
+            okLabel: "转换并保存",
+            cancelLabel: "取消",
+          },
+        );
+        if (!confirmed) return;
+
+        try {
+          const saveDocument = useDocumentStore.getState().saveDocument;
+          const recent = await saveDocument(outputPath);
+          if (recent) setRecentFiles(recent);
+          await refreshTree();
+        } catch (error) {
+          await message(String(error), { title: "转换失败", kind: "error" });
+        }
+        return;
+      }
+
+      const confirmed = await ask(
+        `将「${target.name}」转换为 MDX 格式？\n\n会扫描 HTML 中的本地资源引用，复制到 asset 并打包进 MDX 文件。`,
+        {
+          title: "转换为 MDX",
+          kind: "info",
+          okLabel: "转换",
+          cancelLabel: "取消",
+        },
+      );
+      if (!confirmed) return;
+
+      try {
+        const resultPath = await invoke<string>("convert_html_file_to_mdx", {
+          htmlPath: target.path,
+          outputPath,
+        });
+        const recent = await addRecentFile(resultPath);
+        setRecentFiles(recent);
+        await refreshTree();
+        await message(`已转换为 ${resultPath.split(/[/\\]/).pop()}`, {
+          title: "转换完成",
+          kind: "info",
+        });
+      } catch (error) {
+        await message(String(error), { title: "转换失败", kind: "error" });
+      }
+    },
+    [filePath, workspaceId, refreshTree, setRecentFiles],
+  );
+
   const buildFileContextTarget = useCallback(
     (path: string, name: string): VaultContextTarget => {
       if (!vaultPath) {
@@ -343,6 +403,7 @@ export function useVaultTreeMenu() {
     createDocumentInFolder,
     createDocumentInWorkspace,
     convertMdToMdx,
+    convertHtmlToMdx,
     setInfoItem,
     setRenameTarget,
     buildFileContextTarget,

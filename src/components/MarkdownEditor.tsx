@@ -4,6 +4,7 @@ import { Compartment } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { history as cmHistory, historyKeymap } from "@codemirror/commands";
 import { search } from "@codemirror/search";
+import { html } from "@codemirror/lang-html";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { runRedo, runUndo } from "../lib/editorHistory";
@@ -15,6 +16,7 @@ import {
   selectionFocusPlugin,
 } from "../lib/editorTheme";
 import { applyMarkdownFormat, type MarkdownFormatAction } from "../lib/markdownFormat";
+import type { EditorMode } from "../lib/fileTypes";
 import { useDocumentStore } from "../stores/documentStore";
 import { useEditorStore } from "../stores/editorStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -36,13 +38,14 @@ export interface MarkdownEditorHandle {
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
+  editorMode?: EditorMode;
   onDrop?: (event: React.DragEvent) => void;
   onPaste?: (event: ClipboardEvent) => void;
   onCreateEditor?: (view: EditorView | null) => void;
 }
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
-  function MarkdownEditor({ value, onChange, onDrop, onPaste, onCreateEditor }, ref) {
+  function MarkdownEditor({ value, onChange, editorMode = "markdown", onDrop, onPaste, onCreateEditor }, ref) {
     const editorRef = useRef<ReactCodeMirrorRef>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const suppressChangeRef = useRef(false);
@@ -131,25 +134,33 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       });
     }, [editorHistoryDepth]);
 
-    const extensions = useMemo(
-      () => [
+    const extensions = useMemo(() => {
+      const languageExtension =
+        editorMode === "markdown"
+          ? [
+              markdown({
+                base: markdownLanguage,
+                codeLanguages: languages,
+              }),
+            ]
+          : editorMode === "html"
+            ? [html()]
+            : [];
+
+      return [
         editorHighlight,
         historyCompartmentRef.current.of(cmHistory({ minDepth: editorHistoryDepth })),
         keymap.of(historyKeymap),
         historyStateListener,
         search(),
-        markdown({
-          base: markdownLanguage,
-          codeLanguages: languages,
-        }),
+        ...languageExtension,
         selectedTextField,
         selectionFocusPlugin,
         editorPlaceholder,
         EditorView.lineWrapping,
         editorTheme,
-      ],
-      [editorHistoryDepth],
-    );
+      ];
+    }, [editorHistoryDepth, editorMode]);
 
     return (
       <div

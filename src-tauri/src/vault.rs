@@ -5,18 +5,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
 use crate::mdx::create_empty_mdx;
+use crate::text_file::{is_document_sidecar_name, is_editable_text_extension};
 
 const SKIP_DIR_NAMES: &[&str] = &[".git", ".obsidian", "node_modules", "target", ".codegraph"];
 
-fn is_vault_document_ext(ext: &str) -> bool {
-    ext.eq_ignore_ascii_case("mdx") || ext.eq_ignore_ascii_case("md")
-}
-
-fn is_vault_document_path(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(is_vault_document_ext)
-        .unwrap_or(false)
+fn should_skip_vault_file(name: &str) -> bool {
+    if name.starts_with('.') {
+        return true;
+    }
+    if is_document_sidecar_name(name) {
+        return true;
+    }
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "thumbs.db" | "desktop.ini" | "ds_store"
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +33,7 @@ pub enum VaultTreeNode {
     File {
         name: String,
         path: String,
+        extension: String,
     },
 }
 
@@ -81,12 +85,21 @@ fn scan_directory(vault_root: &Path, current: &Path) -> AppResult<Vec<VaultTreeN
             continue;
         }
 
-        if is_vault_document_path(&path) {
-            nodes.push(VaultTreeNode::File {
-                name,
-                path: path.to_string_lossy().to_string(),
-            });
+        if should_skip_vault_file(&name) {
+            continue;
         }
+
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_lowercase())
+            .unwrap_or_default();
+
+        nodes.push(VaultTreeNode::File {
+            name,
+            path: path.to_string_lossy().to_string(),
+            extension,
+        });
     }
 
     Ok(nodes)
@@ -295,12 +308,7 @@ fn count_folder_contents(path: &Path) -> AppResult<(u32, u32)> {
             continue;
         }
 
-        if entry_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(is_vault_document_ext)
-            .unwrap_or(false)
-        {
+        if !should_skip_vault_file(&name) {
             file_count += 1;
         }
     }
@@ -349,10 +357,7 @@ pub fn get_vault_item_info(vault_path: &str, item_path: &str) -> AppResult<Vault
 pub fn delete_vault_file(vault_path: &str, file_path: &str) -> AppResult<()> {
     let target = validate_vault_item_path(vault_path, file_path)?;
     if !target.is_file() {
-        return Err(AppError::Other("只能删除 Markdown / MDX 文件".to_string()));
-    }
-    if !is_vault_document_path(&target) {
-        return Err(AppError::Other("只能删除 Markdown / MDX 文件".to_string()));
+        return Err(AppError::Other("只能删除文件".to_string()));
     }
     fs::remove_file(target)?;
     Ok(())
@@ -401,13 +406,12 @@ pub fn rename_vault_item(
         let ext = source
             .extension()
             .and_then(|value| value.to_str())
-            .filter(|value| is_vault_document_ext(value))
-            .unwrap_or("mdx");
+            .map(|value| value.to_lowercase())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "mdx".to_string());
         let stem = trimmed
-            .trim_end_matches(".mdx")
-            .trim_end_matches(".MDX")
-            .trim_end_matches(".md")
-            .trim_end_matches(".MD");
+            .trim_end_matches(&format!(".{ext}"))
+            .trim_end_matches(&format!(".{}", ext.to_uppercase()));
         if stem.is_empty() {
             return Err(AppError::Other("无效的文件名".to_string()));
         }
@@ -479,8 +483,15 @@ pub fn move_vault_item(
         )));
     }
 
-    if !is_folder && !is_vault_document_path(&source) {
-        return Err(AppError::Other("只能移动 MDX/Markdown 文档".to_string()));
+    if !is_folder {
+        let ext = source
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_lowercase())
+            .unwrap_or_default();
+        if !is_editable_text_extension(&ext) {
+            return Err(AppError::Other("只能移动可编辑的文本文件".to_string()));
+        }
     }
 
     fs::rename(&source, &destination)?;

@@ -5,6 +5,12 @@ import { ensureFfmpegReadyForTranscode } from "./ffmpegTranscode";
 import { useMediaTranscodeStore } from "../stores/mediaTranscodeStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
+import type { ContentFormat } from "./fileTypes";
+
+export function snippetFormatForContent(contentFormat: ContentFormat): "html" | null {
+  return contentFormat === "html" ? "html" : null;
+}
+
 export { isMediaInsertCancelled, MediaInsertCancelledError } from "./mediaTranscodeConfirm";
 
 function createJobId(): string {
@@ -31,14 +37,17 @@ function registerPendingJob(sourceLabel: string, jobId: string): void {
 export async function insertResourceFromPath(
   workspaceId: string,
   sourcePath: string,
+  contentFormat: ContentFormat = "markdown",
 ): Promise<string> {
   const ffmpegPath = useSettingsStore.getState().ffmpegPath.trim();
   const fileName = fileNameFromPath(sourcePath);
+  const snippetFormat = snippetFormatForContent(contentFormat);
 
   if (!needsMediaTranscode(sourcePath)) {
     return invoke<string>("insert_asset_from_path", {
       workspaceId,
       sourcePath,
+      snippetFormat,
     });
   }
 
@@ -56,6 +65,7 @@ export async function insertResourceFromPath(
       sourcePath,
       ffmpegPath: ffmpegPath || null,
       jobId,
+      snippetFormat,
     });
   } catch (error) {
     useMediaTranscodeStore.getState().upsertJob({
@@ -72,14 +82,17 @@ export async function insertResourceFromBytes(
   workspaceId: string,
   filename: string,
   bytes: Uint8Array,
+  contentFormat: ContentFormat = "markdown",
 ): Promise<string> {
   const ffmpegPath = useSettingsStore.getState().ffmpegPath.trim();
+  const snippetFormat = snippetFormatForContent(contentFormat);
 
   if (!needsMediaTranscode(filename)) {
     return invoke<string>("insert_asset_from_bytes", {
       workspaceId,
       filename,
       bytes: Array.from(bytes),
+      snippetFormat,
     });
   }
 
@@ -97,6 +110,7 @@ export async function insertResourceFromBytes(
       bytes: Array.from(bytes),
       ffmpegPath: ffmpegPath || null,
       jobId,
+      snippetFormat,
     });
   } catch (error) {
     useMediaTranscodeStore.getState().upsertJob({

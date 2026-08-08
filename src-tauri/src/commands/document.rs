@@ -8,24 +8,37 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::manifest::{DocumentMetadataInput, Manifest};
 use crate::mdx::{decrypt_bytes, encrypt_bytes, is_encrypted_mdx as mdx_is_encrypted, pack_workspace, pack_workspace_to_bytes, unpack_bytes_to_workspace, unpack_to_workspace};
+use crate::text_file::{
+    content_format_for_file, extension_lower, is_editable_text_path, is_full_html_document,
+    is_mdx_extension, is_plain_md_extension,
+};
 use crate::versions::{DocumentHistoryEntry, DocumentVersionsFile};
-use crate::workspace::{INDEX_FILE, WorkspaceManager};
-
-fn extension_lower(path: &std::path::Path) -> Option<String> {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_lowercase())
-}
+use crate::workspace::{INDEX_FILE, MANIFEST_FILE, WorkspaceManager};
 
 fn is_plain_md_path(path: &std::path::Path) -> bool {
-    extension_lower(path).as_deref() == Some("md")
+    extension_lower(path)
+        .as_deref()
+        .is_some_and(is_plain_md_extension)
 }
 
 fn is_mdx_path(path: &std::path::Path) -> bool {
-    extension_lower(path).as_deref() == Some("mdx")
+    extension_lower(path)
+        .as_deref()
+        .is_some_and(is_mdx_extension)
 }
 
-fn open_plain_markdown_workspace(
+fn is_direct_save_path(path: &std::path::Path) -> bool {
+    !is_mdx_path(path)
+}
+
+fn manifest_content_format(manifest: &Manifest) -> String {
+    manifest
+        .content_format
+        .clone()
+        .unwrap_or_else(|| "markdown".to_string())
+}
+
+fn open_plain_text_workspace(
     app: &AppHandle,
     workspaces: &WorkspaceManager,
     file_path: &std::path::Path,
@@ -36,6 +49,13 @@ fn open_plain_markdown_workspace(
 
     let content = fs::read_to_string(file_path)?;
     fs::write(workspace_path.join(INDEX_FILE), &content)?;
+
+    let mut manifest = Manifest::default();
+    manifest.content_format = Some(content_format_for_file(file_path, &content).to_string());
+    fs::write(
+        workspace_path.join(MANIFEST_FILE),
+        serde_json::to_string_pretty(&manifest)?,
+    )?;
 
     Ok(workspaces.register_workspace(
         id,
@@ -52,6 +72,7 @@ pub struct DocumentState {
     pub manifest: Manifest,
     pub file_path: Option<String>,
     pub is_encrypted: bool,
+    pub content_format: String,
 }
 
 #[tauri::command]
@@ -67,6 +88,7 @@ pub fn create_document(
         manifest,
         file_path: None,
         is_encrypted: false,
+        content_format: "markdown".to_string(),
     })
 }
 
@@ -112,18 +134,38 @@ pub fn open_document(
             }
         }
         Some("md") => {
-            let info = open_plain_markdown_workspace(&app, &workspaces, &file_path)?;
+            let info = open_plain_text_workspace(&app, &workspaces, &file_path)?;
+            (info, false)
+        }
+        Some(_) if is_editable_text_path(&file_path) => {
+            let info = open_plain_text_workspace(&app, &workspaces, &file_path)?;
             (info, false)
         }
         _ => {
-            return Err(AppError::Other(
-                "仅支持打开 .md 或 .mdx 文件".to_string(),
-            ));
+            return Err(AppError::Other(format!(
+                "不支持打开该文件类型: {}",
+                file_path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("未知")
+            )));
         }
     };
 
     let content = workspaces.read_index(&info.id)?;
     let manifest = workspaces.read_manifest(&info.id)?;
+    let mut content_format = manifest_content_format(&manifest);
+    if content_format == "text"
+        && is_full_html_document(&content)
+        && info
+            .file_path
+            .as_ref()
+            .and_then(|path| path.extension())
+            .and_then(|value| value.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("html") || ext.eq_ignore_ascii_case("htm"))
+    {
+        content_format = "html".to_string();
+    }
 
     Ok(DocumentState {
         workspace_id: info.id,
@@ -131,7 +173,22 @@ pub fn open_document(
         manifest,
         file_path: info.file_path.as_ref().map(|p| p.to_string_lossy().to_string()),
         is_encrypted,
+        content_format,
     })
+}
+
+const PREVIEW_HTML_FILE: &str = "_preview.html";
+
+#[tauri::command]
+pub fn write_html_preview(
+    workspaces: State<'_, WorkspaceManager>,
+    workspace_id: String,
+    html: String,
+) -> Result<String, AppError> {
+    let info = workspaces.get(&workspace_id)?;
+    let path = info.path.join(PREVIEW_HTML_FILE);
+    fs::write(&path, html)?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -202,7 +259,7 @@ pub fn save_document(
         ),
     );
 
-    if is_plain_md_path(&output_path) {
+    if is_direct_save_path(&output_path) {
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -227,7 +284,7 @@ pub fn save_document(
 
     if !is_mdx_path(&output_path) {
         return Err(AppError::Other(
-            "保存路径必须使用 .md 或 .mdx 扩展名".to_string(),
+            "保存路径必须使用 .mdx 扩展名".to_string(),
         ));
     }
 
@@ -239,6 +296,14 @@ pub fn save_document(
     workspaces.cleanup_unused_assets(&workspace_id)?;
 
     let mut manifest = workspaces.read_manifest(&workspace_id)?;
+    if is_full_html_document(&content) {
+        manifest.content_format = Some("html".to_string());
+    } else if manifest.content_format.as_deref() == Some("html") {
+        manifest.content_format = Some("markdown".to_string());
+    } else if manifest.content_format.is_none() {
+        manifest.content_format = Some("markdown".to_string());
+    }
+
     let write_encrypted = if output_path.is_file() {
         crate::mdx::is_encrypted_mdx(&output_path)?
     } else {
@@ -299,6 +364,32 @@ pub fn convert_md_file_to_mdx(md_path: String, output_path: Option<String>) -> R
 }
 
 #[tauri::command]
+pub fn convert_html_file_to_mdx(html_path: String, output_path: Option<String>) -> Result<String, AppError> {
+    let html = PathBuf::from(&html_path);
+    let output = match output_path {
+        Some(p) => PathBuf::from(p),
+        None => html.with_extension("mdx"),
+    };
+
+    if !html.is_file() {
+        return Err(AppError::Other(format!(
+            "HTML 文件不存在: {}",
+            html.to_string_lossy()
+        )));
+    }
+
+    let ext = extension_lower(&html).unwrap_or_default();
+    if ext != "html" && ext != "htm" {
+        return Err(AppError::Other("仅支持转换 .html / .htm 文件".to_string()));
+    }
+    if !is_mdx_path(&output) {
+        return Err(AppError::Other("输出路径必须使用 .mdx 扩展名".to_string()));
+    }
+
+    crate::md_import::convert_html_file_to_mdx(&html, &output)
+}
+
+#[tauri::command]
 pub fn autosave_document(
     app: AppHandle,
     workspaces: State<'_, WorkspaceManager>,
@@ -311,9 +402,14 @@ pub fn autosave_document(
     if info
         .file_path
         .as_ref()
-        .is_some_and(|path| is_plain_md_path(path))
+        .is_some_and(|path| is_direct_save_path(path))
     {
-        let output_path = autosave_dir.join(format!("{workspace_id}.md"));
+        let ext = info
+            .file_path
+            .as_ref()
+            .and_then(|path| extension_lower(path))
+            .unwrap_or_else(|| "md".to_string());
+        let output_path = autosave_dir.join(format!("{workspace_id}.{ext}"));
         let content = workspaces.read_index(&workspace_id)?;
         fs::write(&output_path, content)?;
         return Ok(output_path.to_string_lossy().to_string());

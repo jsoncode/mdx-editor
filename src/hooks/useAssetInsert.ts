@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback } from "react";
 import { insertResourceFromBytes, insertResourceFromPath, isMediaInsertCancelled } from "../lib/mediaInsert";
+import type { ContentFormat } from "../lib/fileTypes";
 import {
   clipboardHasFiles,
   extensionFromName,
@@ -17,6 +18,7 @@ import { useDocumentStore } from "../stores/documentStore";
 export function useAssetInsert(
   insertAtCursor: (text: string) => void,
   onOpenMdx?: (path: string) => void | Promise<void>,
+  contentFormat: ContentFormat = "markdown",
 ) {
   const workspaceId = useDocumentStore((s) => s.workspaceId);
 
@@ -38,17 +40,17 @@ export function useAssetInsert(
   const insertFromPath = useCallback(
     async (sourcePath: string) => {
       if (!workspaceId) return false;
-      return insertSnippet(insertResourceFromPath(workspaceId, sourcePath));
+      return insertSnippet(insertResourceFromPath(workspaceId, sourcePath, contentFormat));
     },
-    [workspaceId, insertSnippet],
+    [workspaceId, insertSnippet, contentFormat],
   );
 
   const insertFromBytes = useCallback(
     async (filename: string, bytes: Uint8Array) => {
       if (!workspaceId) return false;
-      return insertSnippet(insertResourceFromBytes(workspaceId, filename, bytes));
+      return insertSnippet(insertResourceFromBytes(workspaceId, filename, bytes, contentFormat));
     },
-    [workspaceId, insertSnippet],
+    [workspaceId, insertSnippet, contentFormat],
   );
 
   const insertPaths = useCallback(

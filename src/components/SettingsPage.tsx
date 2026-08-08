@@ -17,6 +17,7 @@ import {
   MIN_HISTORY_DEPTH,
 } from "../lib/settings";
 import { useSettingsStore } from "../stores/settingsStore";
+import { handleToggleDevTools } from "../lib/devtoolsActions";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
 import type { GitSyncSettings } from "../types/settings";
@@ -560,6 +561,13 @@ export function SettingsPage() {
                   onClick={() => void refreshLogPreview()}
                 >
                   {loadingLog ? "加载中…" : "刷新预览"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void handleToggleDevTools()}
+                >
+                  开发者工具 (F12)
                 </button>
               </SettingsInlineActions>
               <LogViewToggle mode={logViewMode} onChange={setLogViewMode} />

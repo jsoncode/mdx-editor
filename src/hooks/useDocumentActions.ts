@@ -12,6 +12,7 @@ import { buildExportHtml } from "../lib/export";
 import {
   defaultSavePath,
   isPlainMdPath,
+  isPlainHtmlPath,
   MARKDOWN_DOCUMENT_OPEN_FILTERS,
   MARKDOWN_DOCUMENT_SAVE_FILTERS,
   MDX_SAVE_FILTER,
@@ -35,6 +36,7 @@ export function useDocumentActions(previewHtml: string) {
   const {
     filePath,
     manifest,
+    contentFormat,
     workspaceId,
     newDocument,
     openDocument,
@@ -42,6 +44,9 @@ export function useDocumentActions(previewHtml: string) {
     insertText,
     setRecentFiles,
   } = useDocumentStore();
+
+  const insertContentFormat =
+    contentFormat === "html" || (filePath && isPlainHtmlPath(filePath)) ? "html" : contentFormat;
 
   const updateTitle = async (path?: string | null) => {
     const name = path?.split(/[/\\]/).pop() ?? "未命名文档";
@@ -92,7 +97,7 @@ export function useDocumentActions(previewHtml: string) {
   };
 
   const handleSave = async () => {
-    if (filePath && isPlainMdPath(filePath)) {
+    if (filePath && (isPlainMdPath(filePath) || isPlainHtmlPath(filePath))) {
       const choice = await promptPlainMdSaveChoice();
       if (choice === "mdx") {
         const selected = await save({
@@ -164,7 +169,7 @@ export function useDocumentActions(previewHtml: string) {
     if (typeof selected !== "string") return;
 
     try {
-      const snippet = await insertResourceFromPath(workspaceId, selected);
+      const snippet = await insertResourceFromPath(workspaceId, selected, insertContentFormat);
       insertText(`\n${snippet}\n`);
     } catch (error) {
       if (isMediaInsertCancelled(error)) return;

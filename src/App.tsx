@@ -23,13 +23,21 @@ import { usePrintLayout } from "./hooks/usePrintLayout";
 import { useWindowState } from "./hooks/useWindowState";
 import { getRecentFileEntries } from "./lib/recentFiles";
 import { isInsertablePath, isMarkdownDocumentPath } from "./lib/media";
+import { isEditableInEditor } from "./lib/fileTypes";
+import { isPlainHtmlPath } from "./lib/documentPaths";
 import { MARKDOWN_DOCUMENT_SAVE_FILTERS, defaultSavePath, isPlainMdPath } from "./lib/documentPaths";
 import { promptPlainMdSaveChoice } from "./lib/savePrompt";
 import { notifyGitPushFailed } from "./lib/gitSyncWorkflow";
 import { flushEditorContentToStore } from "./lib/editorContent";
 import { isIdleSession } from "./lib/session";
 import { saveGuard } from "./lib/saveGuard";
-import { isCloseDocumentShortcut, isSaveShortcut, consumeShortcut } from "./lib/appShortcuts";
+import { handleToggleDevTools } from "./lib/devtoolsActions";
+import {
+  consumeShortcut,
+  isCloseDocumentShortcut,
+  isDevToolsShortcut,
+  isSaveShortcut,
+} from "./lib/appShortcuts";
 import { diag, diagSaveCloseState, installDiagnosticHandlers, getDiagnosticLogDir } from "./lib/diagnosticLog";
 import { useDocumentStore } from "./stores/documentStore";
 import { useUiStore } from "./stores/uiStore";
@@ -151,18 +159,23 @@ function App() {
 
         void (async () => {
           for (const path of payload.paths) {
-            if (isMarkdownDocumentPath(path)) {
+            if (isMarkdownDocumentPath(path) || isEditableInEditor(path)) {
               await openExternalDocument(path);
               continue;
             }
 
             if (!isInsertablePath(path)) continue;
 
-            const { workspaceId, insertAtCursor } = useDocumentStore.getState();
+            const { workspaceId, insertAtCursor, contentFormat, filePath } = useDocumentStore.getState();
             if (!workspaceId || !insertAtCursor) continue;
 
+            const insertFormat =
+              contentFormat === "html" || (filePath && isPlainHtmlPath(filePath))
+                ? "html"
+                : contentFormat;
+
             try {
-              const snippet = await insertResourceFromPath(workspaceId, path);
+              const snippet = await insertResourceFromPath(workspaceId, path, insertFormat);
               insertAtCursor(`\n${snippet}\n`);
               useUiStore.getState().setAppView("editor");
             } catch (error) {
@@ -355,6 +368,12 @@ function App() {
       }
       if (event.key === "Escape" && searchOpen) {
         setSearchOpen(false);
+        return;
+      }
+      if (isDevToolsShortcut(event)) {
+        consumeShortcut(event);
+        void handleToggleDevTools();
+        return;
       }
     };
     window.addEventListener("keydown", handleKeyDown, true);

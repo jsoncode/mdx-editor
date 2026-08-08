@@ -1,6 +1,8 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { message, open } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { getFileName } from "../lib/recentFiles";
+import { isEditableInEditor } from "../lib/fileTypes";
 import { useDocumentStore } from "../stores/documentStore";
 import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
@@ -27,6 +29,15 @@ export function useVaultActions() {
 
   const openFile = async (path: string) => {
     if (path === filePath) return;
+
+    if (!isEditableInEditor(path)) {
+      try {
+        await openPath(path);
+      } catch (error) {
+        await message(String(error), { title: "无法用系统默认应用打开", kind: "error" });
+      }
+      return;
+    }
 
     const entries = await openDocument(path);
     setRecentFiles(entries);

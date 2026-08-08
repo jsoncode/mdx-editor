@@ -24,6 +24,9 @@ pub struct Manifest {
     pub title: String,
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
+    /// `markdown` | `html` | `text` — omitted means markdown for older MDX files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_format: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_info: Option<DeviceInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,6 +41,7 @@ impl Default for Manifest {
             title: "未命名文档".to_string(),
             created_at: now,
             modified_at: now,
+            content_format: Some("markdown".to_string()),
             device_info: None,
             location: None,
         }

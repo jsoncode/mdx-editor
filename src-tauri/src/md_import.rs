@@ -275,6 +275,40 @@ fn replace_html_attribute(content: &str, attr: &str, from: &str, to: &str) -> St
     result
 }
 
+pub fn convert_html_file_to_mdx(html_path: &Path, output_path: &Path) -> AppResult<String> {
+    if !html_path.is_file() {
+        return Err(AppError::Other(format!(
+            "HTML 文件不存在: {}",
+            html_path.to_string_lossy()
+        )));
+    }
+
+    let base_dir = html_path.parent().unwrap_or_else(|| Path::new("."));
+    let content = fs::read_to_string(html_path)?;
+    let temp = std::env::temp_dir().join(format!("mdx-convert-html-{}", Uuid::new_v4()));
+    fs::create_dir_all(temp.join(ASSET_DIR))?;
+
+    let imported = import_local_assets(&temp, base_dir, &content)?;
+    fs::write(temp.join(INDEX_FILE), imported)?;
+
+    let mut manifest = crate::manifest::Manifest::default();
+    manifest.content_format = Some("html".to_string());
+    fs::write(
+        temp.join(crate::workspace::MANIFEST_FILE),
+        serde_json::to_string_pretty(&manifest)?,
+    )?;
+    crate::versions::ensure_versions_file(&temp)?;
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    crate::mdx::pack_workspace(&temp, output_path, &mut manifest)?;
+    let _ = fs::remove_dir_all(&temp);
+
+    Ok(output_path.to_string_lossy().to_string())
+}
+
 pub fn convert_md_file_to_mdx(md_path: &Path, output_path: &Path) -> AppResult<String> {
     if !md_path.is_file() {
         return Err(AppError::Other(format!(
@@ -291,7 +325,8 @@ pub fn convert_md_file_to_mdx(md_path: &Path, output_path: &Path) -> AppResult<S
     let imported = import_local_assets(&temp, base_dir, &content)?;
     fs::write(temp.join(INDEX_FILE), imported)?;
 
-    let manifest = crate::manifest::Manifest::default();
+    let mut manifest = crate::manifest::Manifest::default();
+    manifest.content_format = Some("markdown".to_string());
     fs::write(
         temp.join(crate::workspace::MANIFEST_FILE),
         serde_json::to_string_pretty(&manifest)?,

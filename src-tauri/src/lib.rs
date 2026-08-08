@@ -8,6 +8,7 @@ mod launch;
 mod manifest;
 mod md_import;
 mod mdx;
+mod text_file;
 mod media_transcode;
 mod media_preview;
 mod pdf_export;
@@ -96,6 +97,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             take_launch_file,
             disable_webview_accelerators,
+            commands::toggle_devtools,
+            commands::open_devtools,
             diagnostics::diagnostic_log,
             diagnostics::get_diagnostic_log_dir,
             diagnostics::read_diagnostic_log_tail,
@@ -106,6 +109,8 @@ pub fn run() {
             commands::update_document_content,
             commands::save_document,
             commands::convert_md_file_to_mdx,
+            commands::convert_html_file_to_mdx,
+            commands::write_html_preview,
             commands::autosave_document,
             commands::close_document,
             commands::get_document_manifest,

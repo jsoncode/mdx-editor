@@ -17,6 +17,7 @@ export interface Manifest {
   title: string;
   created_at: string;
   modified_at: string;
+  content_format?: "markdown" | "html" | "text" | null;
   device_info?: DeviceInfo | null;
   location?: GeoLocation | null;
 }
@@ -27,6 +28,7 @@ export interface DocumentState {
   manifest: Manifest;
   file_path: string | null;
   is_encrypted?: boolean;
+  content_format?: string;
 }
 
 export type SaveStatus = "saved" | "saving" | "dirty" | "idle";

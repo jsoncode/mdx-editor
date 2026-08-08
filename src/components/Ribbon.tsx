@@ -1,3 +1,4 @@
+import { handleToggleDevTools } from "../lib/devtoolsActions";
 import { useDocumentActions } from "../hooks/useDocumentActions";
 import { saveGuard } from "../lib/saveGuard";
 import { diag, diagSaveCloseState } from "../lib/diagnosticLog";
@@ -172,6 +173,11 @@ export function Ribbon({ previewHtml, onPrint }: RibbonProps) {
                 setSearchOpen(false);
                 showSettings();
               }}
+            />
+            <RibbonMenuItem
+              label="开发者工具"
+              icon={<IconSearch />}
+              onClick={() => void handleToggleDevTools()}
             />
           </RibbonMenu>
         </nav>

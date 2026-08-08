@@ -9,7 +9,7 @@ use crate::asset_store::store_asset_from_path;
 use crate::error::{AppError, AppResult};
 use crate::media_preview::{is_direct_playable, probe_has_video_stream, target_extension, transcode_media_to_file};
 use crate::workspace::{
-    extension_from_path, is_image_ext, is_video_ext, markdown_snippet_for_asset, WorkspaceManager,
+    asset_snippet_for_format, extension_from_path, is_image_ext, is_video_ext, WorkspaceManager,
 };
 
 #[derive(Clone, Serialize)]
@@ -46,6 +46,7 @@ fn needs_transcode(ext: &str) -> bool {
 }
 
 fn snippet_for_source(
+    format: Option<&str>,
     relative_path: &str,
     source_ext: &str,
     display_name: Option<&str>,
@@ -55,10 +56,11 @@ fn snippet_for_source(
     } else {
         source_ext
     };
-    markdown_snippet_for_asset(relative_path, output_ext, display_name)
+    asset_snippet_for_format(format, relative_path, output_ext, display_name)
 }
 
 fn snippet_for_transcoded_output(
+    format: Option<&str>,
     relative_path: &str,
     output_path: &Path,
     source_ext: &str,
@@ -69,7 +71,7 @@ fn snippet_for_transcoded_output(
     let has_video = probe_has_video_stream(app, user_path, output_path)
         .unwrap_or_else(|| is_video_ext(source_ext));
     let snippet_ext = if has_video { "mp4" } else { "m4a" };
-    markdown_snippet_for_asset(relative_path, snippet_ext, display_name)
+    asset_snippet_for_format(format, relative_path, snippet_ext, display_name)
 }
 
 pub fn insert_media_from_path(
@@ -79,6 +81,7 @@ pub fn insert_media_from_path(
     source_path: &Path,
     user_path: Option<&str>,
     job_id: &str,
+    snippet_format: Option<&str>,
 ) -> AppResult<String> {
     if !source_path.is_file() {
         return Err(AppError::Other(format!(
@@ -116,6 +119,7 @@ pub fn insert_media_from_path(
             },
         );
         return Ok(snippet_for_source(
+            snippet_format,
             &relative_path,
             &ext,
             Some(&display_name),
@@ -194,6 +198,7 @@ pub fn insert_media_from_path(
 
     let relative_path = store_asset_from_path(&asset_dir, &temp_output)?;
     let snippet = snippet_for_transcoded_output(
+        snippet_format,
         &relative_path,
         &temp_output,
         &ext,
@@ -225,6 +230,7 @@ pub fn insert_media_from_bytes(
     bytes: &[u8],
     user_path: Option<&str>,
     job_id: &str,
+    snippet_format: Option<&str>,
 ) -> AppResult<String> {
     let temp_source = std::env::temp_dir().join(format!(
         "mdx-source-{}-{}",
@@ -242,6 +248,7 @@ pub fn insert_media_from_bytes(
         &temp_source,
         user_path,
         job_id,
+        snippet_format,
     );
     let _ = fs::remove_file(&temp_source);
     result

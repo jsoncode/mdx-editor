@@ -290,6 +290,45 @@ fn escape_markdown_link_text(text: &str) -> String {
         .replace(']', "\\]")
 }
 
+fn escape_html_attr(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+pub fn html_snippet_for_asset(
+    relative_path: &str,
+    ext: &str,
+    display_name: Option<&str>,
+) -> String {
+    let stored_name = relative_path.rsplit('/').next().unwrap_or(relative_path);
+    let label = escape_html_attr(display_name.unwrap_or(stored_name));
+
+    if is_image_ext(ext) {
+        format!("<img src=\"{relative_path}\" alt=\"{label}\">")
+    } else if is_video_ext(ext) {
+        format!("<video controls src=\"{relative_path}\"></video>")
+    } else if is_audio_ext(ext) {
+        format!("<audio controls src=\"{relative_path}\"></audio>")
+    } else {
+        format!("<a href=\"{relative_path}\">{label}</a>")
+    }
+}
+
+pub fn asset_snippet_for_format(
+    format: Option<&str>,
+    relative_path: &str,
+    ext: &str,
+    display_name: Option<&str>,
+) -> String {
+    if format == Some("html") {
+        html_snippet_for_asset(relative_path, ext, display_name)
+    } else {
+        markdown_snippet_for_asset(relative_path, ext, display_name)
+    }
+}
+
 pub fn markdown_snippet_for_asset(
     relative_path: &str,
     ext: &str,

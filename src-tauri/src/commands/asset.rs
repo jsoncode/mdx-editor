@@ -6,7 +6,7 @@ use tauri::State;
 use crate::asset_store::{store_asset_from_bytes, store_asset_from_path};
 use crate::error::AppError;
 use crate::workspace::{
-    extension_from_path, markdown_snippet_for_asset, ASSET_DIR, WorkspaceManager,
+    asset_snippet_for_format, extension_from_path, ASSET_DIR, WorkspaceManager,
 };
 
 #[tauri::command]
@@ -20,6 +20,7 @@ pub fn insert_asset_from_path(
     workspaces: State<'_, WorkspaceManager>,
     workspace_id: String,
     source_path: String,
+    snippet_format: Option<String>,
 ) -> Result<String, AppError> {
     let source = PathBuf::from(&source_path);
     if !source.exists() {
@@ -35,7 +36,8 @@ pub fn insert_asset_from_path(
         .and_then(|name| name.to_str())
         .map(str::to_string);
 
-    Ok(markdown_snippet_for_asset(
+    Ok(asset_snippet_for_format(
+        snippet_format.as_deref(),
         &relative_path,
         &ext,
         display_name.as_deref(),
@@ -48,6 +50,7 @@ pub fn insert_asset_from_bytes(
     workspace_id: String,
     filename: String,
     bytes: Vec<u8>,
+    snippet_format: Option<String>,
 ) -> Result<String, AppError> {
     let ext = extension_from_path(PathBuf::from(&filename).as_path());
     let asset_dir = workspaces.asset_dir(&workspace_id)?;
@@ -58,7 +61,8 @@ pub fn insert_asset_from_bytes(
         .and_then(|name| name.to_str())
         .map(str::to_string);
 
-    Ok(markdown_snippet_for_asset(
+    Ok(asset_snippet_for_format(
+        snippet_format.as_deref(),
         &relative_path,
         &ext,
         display_name.as_deref(),

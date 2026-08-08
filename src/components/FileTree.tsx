@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { getVaultFileCategory, isVaultFileEditable, type VaultFileCategory } from "../lib/fileTypes";
 import { isVaultFile, isVaultFolder, type VaultTreeNode } from "../types/vault";
 import type { VaultDragPayload } from "../hooks/useVaultTreeDrag";
 
@@ -119,6 +120,8 @@ function FileTreeNodeItem({
   if (isVaultFile(node)) {
     const active = activePath === node.path;
     const relativePath = getRelativeVaultPath(vaultPath, node.path);
+    const category = getVaultFileCategory(node.path, node.extension);
+    const editable = isVaultFileEditable(category);
     const payload: VaultDragPayload = {
       kind: "file",
       relativePath,
@@ -132,12 +135,12 @@ function FileTreeNodeItem({
         <VaultTreeRow
           depth={depth}
           style={treeRowStyle(depth)}
-          className={`vault-tree-file${active ? " active" : ""}${isDragging ? " dragging" : ""}`}
-          onPointerDown={(event) => onPointerDown(payload, event)}
+          className={`vault-tree-file${active ? " active" : ""}${isDragging ? " dragging" : ""}${editable ? "" : " vault-tree-file-readonly"}`}
+          onPointerDown={editable ? (event) => onPointerDown(payload, event) : undefined}
           chevron={<span className="vault-tree-chevron-placeholder" aria-hidden="true" />}
-          icon={<FileIcon />}
+          icon={<VaultFileIcon category={category} />}
           label={node.name}
-          title={node.path}
+          title={editable ? node.path : `${node.path}（不可在编辑器中打开）`}
           role="treeitem"
           onActivate={() => {
             if (consumeClickSuppression()) return;
@@ -247,7 +250,7 @@ function VaultTreeRow({
   ariaExpanded?: boolean;
   onActivate: () => void;
   onContextMenu: (event: MouseEvent) => void;
-  onPointerDown: (event: PointerEvent) => void;
+  onPointerDown?: (event: PointerEvent) => void;
 }) {
   return (
     <div
@@ -319,6 +322,89 @@ function FolderIcon({ open }: { open: boolean }) {
   );
 }
 
+function VaultFileIcon({ category }: { category: VaultFileCategory }) {
+  switch (category) {
+    case "image":
+      return <ImageFileIcon />;
+    case "video":
+      return <VideoFileIcon />;
+    case "audio":
+      return <AudioFileIcon />;
+    case "html":
+      return <HtmlFileIcon />;
+    case "text":
+      return <TextFileIcon />;
+    case "attachment":
+      return <AttachmentFileIcon />;
+    case "document":
+      return <DocumentFileIcon />;
+    default:
+      return <FileIcon />;
+  }
+}
+
+function DocumentFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M5 2h4.5L13 5.5V13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M9 2v4h4M6.5 8.5h3M6.5 10.5h2" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function HtmlFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 3.5h10v9H3z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.5 6.5h2M9.5 6.5h2M5.5 9.5h5" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TextFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M5 2h4.5L13 5.5V13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.5 8h3M6.5 10h2" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ImageFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2.5" y="3.5" width="11" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="6" cy="7" r="1" fill="currentColor" />
+      <path d="M3.5 11.5l2.5-2 2 1.5 2.5-2.5 2 3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function VideoFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2.5" y="4" width="8.5" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M11 6.5l2.5-1.5v5.5L11 9.5z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AudioFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M6 4.5v7M9 3.5v9M12 6v4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AttachmentFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M9.5 3.5l-4 4a2 2 0 1 0 2.8 2.8l4.7-4.7a3 3 0 0 0-4.2-4.2l-5.3 5.3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function FileIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -336,7 +422,7 @@ function FileIcon() {
 export function VaultEmptyState({ onOpenVault }: { onOpenVault: () => void }) {
   return (
     <div className="vault-empty">
-      <p>打开一个文件夹作为工作区，以树形结构管理 MDX 文档。</p>
+      <p>打开一个文件夹作为工作区，以树形结构管理工作区内的所有文件。</p>
       <button type="button" onClick={onOpenVault}>
         打开工作区
       </button>

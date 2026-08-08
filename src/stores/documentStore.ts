@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { clearAssetCache } from "../lib/assetResolver";
 import { applyDocumentMetadata } from "../lib/documentMetadata";
-import { isPlainMdPath } from "../lib/documentPaths";
 import { recordDocumentHistory } from "../lib/documentHistory";
 import { isPathInVault } from "../lib/gitSync";
 import { pullVaultBeforeAccess, pushVaultAfterSave } from "../lib/gitSyncWorkflow";
@@ -16,7 +15,9 @@ import {
   setRememberedPassword,
 } from "../lib/encryptedPasswordStore";
 import { saveGuard } from "../lib/saveGuard";
+import { normalizeContentFormat } from "../lib/fileTypes";
 import type { DocumentState, Manifest, SaveStatus } from "../types/document";
+import type { ContentFormat } from "../lib/fileTypes";
 import type { RecentFileEntry } from "../types/recent";
 import { useSettingsStore } from "./settingsStore";
 import { useVaultStore } from "./vaultStore";
@@ -27,6 +28,7 @@ interface DocumentStore {
   savedContent: string;
   manifest: Manifest | null;
   filePath: string | null;
+  contentFormat: ContentFormat;
   isEncrypted: boolean;
   encryptionPassword: string | null;
   isDirty: boolean;
@@ -58,6 +60,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   savedContent: "",
   manifest: null,
   filePath: null,
+  contentFormat: "markdown",
   isEncrypted: false,
   encryptionPassword: null,
   isDirty: false,
@@ -111,6 +114,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       savedContent: doc.content,
       manifest: doc.manifest,
       filePath: doc.file_path,
+      contentFormat: normalizeContentFormat(doc.content_format ?? doc.manifest.content_format),
       isEncrypted: false,
       encryptionPassword: null,
       isDirty: false,
@@ -152,6 +156,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
               savedContent: doc.content,
               manifest: doc.manifest,
               filePath: doc.file_path,
+              contentFormat: normalizeContentFormat(doc.content_format ?? doc.manifest.content_format),
               isEncrypted: doc.is_encrypted ?? true,
               encryptionPassword: password,
               isDirty: false,
@@ -198,6 +203,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       savedContent: doc.content,
       manifest: doc.manifest,
       filePath: doc.file_path,
+      contentFormat: normalizeContentFormat(doc.content_format ?? doc.manifest.content_format),
       isEncrypted: doc.is_encrypted ?? Boolean(password),
       encryptionPassword: password,
       isDirty: false,
@@ -263,10 +269,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       await invoke("update_document_content", { workspaceId, content });
 
       const targetPath = path ?? filePath;
-      const isPlainMdSave = targetPath != null && isPlainMdPath(targetPath);
+      const isDirectSave = targetPath != null && !targetPath.toLowerCase().endsWith(".mdx");
 
       let manifest = currentManifest;
-      if (!isPlainMdSave) {
+      if (!isDirectSave) {
         const { recordDeviceInfo, recordLocation, documentHistoryDepth } =
           useSettingsStore.getState();
         manifest = await applyDocumentMetadata(
@@ -392,6 +398,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       savedContent: "",
       manifest: null,
       filePath: null,
+      contentFormat: "markdown",
       isEncrypted: false,
       encryptionPassword: null,
       isDirty: false,

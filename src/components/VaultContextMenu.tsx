@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { isPlainMdPath } from "../lib/documentPaths";
+import { getVaultFileCategory, vaultFileCategoryLabel } from "../lib/fileTypes";
 
 export interface VaultContextMenuItem {
   id: string;
@@ -108,6 +109,11 @@ export function VaultItemInfoDialog({
 }) {
   if (!info) return null;
 
+  const fileTypeLabel =
+    info.kind === "folder"
+      ? "文件夹"
+      : vaultFileCategoryLabel(getVaultFileCategory(info.path));
+
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div
@@ -124,7 +130,7 @@ export function VaultItemInfoDialog({
           </div>
           <div>
             <dt>类型</dt>
-            <dd>{info.kind === "folder" ? "文件夹" : info.path.toLowerCase().endsWith(".md") ? "Markdown 文档 (.md)" : "MDX 文档 (.mdx)"}</dd>
+            <dd>{info.kind === "folder" ? "文件夹" : fileTypeLabel}</dd>
           </div>
           <div>
             <dt>相对路径</dt>

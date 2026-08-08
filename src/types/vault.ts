@@ -9,6 +9,7 @@ export type VaultTreeNode =
       kind: "file";
       name: string;
       path: string;
+      extension: string;
     };
 
 export function isVaultFolder(node: VaultTreeNode): node is Extract<VaultTreeNode, { kind: "folder" }> {
